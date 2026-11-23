@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
-    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com; frame-src https://*.firebaseapp.com https://apis.google.com; object-src 'none'; manifest-src 'self' blob:; base-uri 'none'; form-action 'none'">
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline' https://www.gstatic.com https://apis.google.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self' https://*.googleapis.com https://*.firebaseio.com https://*.firebaseapp.com wss://*.firebaseio.com https://*.cloudfunctions.net https://*.run.app; frame-src https://*.firebaseapp.com https://apis.google.com; object-src 'none'; manifest-src 'self' blob:; base-uri 'none'; form-action 'none'">
     <title>COFFEE CORNER | كافيه كورنر</title>
     
     <meta name="theme-color" content="#991b1b">
@@ -10606,7 +10606,6 @@ document.addEventListener('DOMContentLoaded', () => {
         cloudDb.collection('settings').doc('app_intro').onSnapshot(s => { if (s.exists) { IC = s.data(); safeSet('cc_app_intro', IC); } }, () => {});
         cloudDb.collection('settings').doc('ai_persona').onSnapshot(s => { if (s.exists) { P = Object.assign({ name: DEF, tag: '', img: '', caps: {} }, s.data()); safeSet('cc_ai_persona', P); applyPersona(); } }, () => {}); }, 600);
 });
-showIntro(false);
 })();
 
 </script>
@@ -11092,6 +11091,432 @@ document.addEventListener('DOMContentLoaded', () => {
     if (box) box.innerHTML = '<div style="font-size:11.5px;font-weight:700;margin-bottom:6px">أرسلنا رابط تأكيد إلى بريدك. افتحه (راجع البريد المزعج أيضاً) ثم اضغط:</div><button type="button" class="btn-brand-solid" style="background:var(--status-success)" onclick="verifyEmailOtpCode()">تحقق الآن</button>';
     const b = $('btnSendEmailOtp'); if (b) b.innerText = 'إرسال رابط التأكيد';
     const t = setInterval(() => { if (!ready()) return; clearInterval(t); handleLink().catch(x => console.warn('email link', x)); }, 500);
+});
+})();
+
+</script>
+<script>
+/* =========================================================
+   E) مقدمة سينمائية + شاشة دخول زجاجية فاخرة (قابلة للتعديل من لوحة الإدارة)
+   ========================================================= */
+(function () {
+const $ = id => document.getElementById(id);
+const e = s => sanitizeText(String(s == null ? '' : s));
+const IS_PORTAL = /portal=|#admin|#branch/i.test(location.search + location.hash);
+const DEFBG = 'https://images.unsplash.com/photo-1495474472287-4d71bcdd2085?auto=format&fit=crop&w=1400&q=70';
+const GIF = 'data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7';
+const DEF = { c1: '#5b1219', c2: '#1c0b07', accent: '#e6c28a', photo: true, bg: '', text: 'قهوة وحلويات تُحضّر لك بحب', dur: 5, style: 'cinema', ai: true, bokeh: true, grain: true, parallax: true };
+let IC = safeGet('cc_app_intro', {}), pend = null;
+const cfg = o => { const c = Object.assign({}, DEF, o || IC); if (c.style === 'cup') c.style = 'cinema'; return c; };
+const rgba = (h, a) => { const n = parseInt(String(h).replace('#', ''), 16) || 0; return `rgba(${n >> 16 & 255},${n >> 8 & 255},${n & 255},${a})`; };
+const NOISE = `url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='180' height='180'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='.85' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .6 0'/></filter><rect width='100%' height='100%' filter='url(%23n)'/></svg>")`;
+const photoOf = c => c.photo === false ? '' : (c.bg || DEFBG);
+const gradeOf = c => `linear-gradient(160deg,${rgba(c.c1, .86)} 0%,${rgba(c.c2, .93)} 100%)`;
+
+const css = document.createElement('style');
+css.textContent = `
+#zIntro{position:fixed;inset:0;z-index:2147483200;overflow:hidden;color:#fff;text-align:center;font-family:var(--font-main);background:var(--c2);transition:opacity .9s ease,transform .9s ease,filter .9s ease}
+#zIntro.out{opacity:0;transform:scale(1.08);filter:blur(10px);pointer-events:none}
+#zIntro>div{position:absolute}
+.zx-bg{inset:-6%;background-size:cover;background-position:center;opacity:0;animation:zxBg 1.4s ease forwards,zxKen 14s ease-out forwards;transform:translate(calc(var(--px,0)*-12px),calc(var(--py,0)*-12px))}
+@keyframes zxBg{to{opacity:1}}@keyframes zxKen{from{scale:1}to{scale:1.14}}
+.zx-grade{inset:0}.zx-vig{inset:0;background:radial-gradient(ellipse at 50% 45%,transparent 30%,rgba(0,0,0,.55) 100%)}
+.zx-orb{border-radius:50%;filter:blur(22px);animation:zxFloat var(--t,10s) ease-in-out infinite alternate;opacity:var(--o,.25)}
+@keyframes zxFloat{from{transform:translate(0,0) scale(1)}to{transform:translate(var(--dx,30px),var(--dy,-40px)) scale(1.25)}}
+.zx-sweep{inset:-30%;background:linear-gradient(105deg,transparent 38%,rgba(255,255,255,.13) 50%,transparent 62%);transform:translateX(-110%);animation:zxSweep 3.4s 1.4s ease-in-out forwards}
+@keyframes zxSweep{to{transform:translateX(110%)}}
+.zx-grain{inset:-50%;background-image:${NOISE};opacity:.1;mix-blend-mode:overlay;animation:zxGrain .9s steps(6) infinite}
+@keyframes zxGrain{0%{transform:translate(0,0)}25%{transform:translate(-4%,3%)}50%{transform:translate(3%,-4%)}75%{transform:translate(-3%,-2%)}100%{transform:translate(2%,4%)}}
+.zx-stage{inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:14px;padding:24px;transform:translate(calc(var(--px,0)*8px),calc(var(--py,0)*8px))}
+.zx-medal{position:relative;width:146px;height:146px;display:flex;align-items:center;justify-content:center;opacity:0;transform:scale(.6);animation:zxIn 1s cubic-bezier(.2,1.2,.3,1) .2s forwards}
+@keyframes zxIn{to{opacity:1;transform:none}}
+.zx-halo{position:absolute;inset:-14px;border-radius:50%;background:conic-gradient(from 0deg,transparent 0,var(--za) 25%,transparent 55%);filter:blur(14px);opacity:.75;animation:zxSpin 5s linear infinite}
+@keyframes zxSpin{to{transform:rotate(360deg)}}
+.zx-glass{position:relative;width:118px;height:118px;border-radius:50%;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.1);backdrop-filter:blur(14px);-webkit-backdrop-filter:blur(14px);border:1px solid rgba(255,255,255,.35);box-shadow:0 20px 50px rgba(0,0,0,.5),inset 0 1px 0 rgba(255,255,255,.4)}
+.zx-glass img{width:100%;height:100%;object-fit:cover}.zx-mono{font:800 44px/1 var(--font-num);color:var(--za);text-shadow:0 0 24px var(--za)}
+.zx-ring{position:absolute;inset:0;transform:rotate(-90deg)}.zx-ring circle{fill:none;stroke-width:2.4}
+.zx-ring .p{stroke:var(--za);stroke-linecap:round;stroke-dasharray:439.8;stroke-dashoffset:439.8;animation:zxRing var(--zt) cubic-bezier(.4,.1,.2,1) .3s forwards}@keyframes zxRing{to{stroke-dashoffset:0}}
+.zx-name{font-size:clamp(26px,7.5vw,38px);font-weight:800;text-shadow:0 4px 30px rgba(0,0,0,.6),0 0 30px var(--za);display:flex;gap:.35em;flex-wrap:wrap;justify-content:center}
+.zx-w{display:inline-block;opacity:0;transform:translateY(22px);filter:blur(8px);animation:zxWord .9s cubic-bezier(.2,.9,.3,1) forwards}@keyframes zxWord{to{opacity:1;transform:none;filter:none}}
+.zx-line{height:1.5px;width:0;background:linear-gradient(90deg,transparent,var(--za),transparent);animation:zxLine 1.2s ease 1.1s forwards}@keyframes zxLine{to{width:min(240px,60vw)}}
+.zx-tag{font-size:13px;color:#f1e3cc;max-width:310px;line-height:1.9;opacity:0;animation:zxIn .9s ease 1.5s forwards}
+.zx-chip{display:inline-flex;align-items:center;gap:8px;background:rgba(255,255,255,.1);backdrop-filter:blur(10px);-webkit-backdrop-filter:blur(10px);border:1px solid rgba(255,255,255,.28);border-radius:99px;padding:6px 14px 6px 8px;font-size:11.5px;color:#fff;font-weight:700;opacity:0;animation:zxIn .9s ease 1.9s forwards}
+.zx-chip img{width:24px;height:24px;border-radius:50%;object-fit:cover;background:#fff;border:1.5px solid var(--za)}
+.zx-skip{bottom:calc(22px + env(safe-area-inset-bottom,0px));left:0;right:0;font-size:10.5px;color:rgba(255,255,255,.55);letter-spacing:1px;opacity:0;animation:zxIn 1s ease 2.2s forwards}
+@media (prefers-reduced-motion:reduce){#zIntro *{animation-duration:.01s!important;animation-delay:0s!important}}
+#authGatekeeperOverlay{background:var(--zg,linear-gradient(160deg,#5b1219,#1c0b07))!important;background-size:cover!important;background-position:center!important;backdrop-filter:none!important;-webkit-backdrop-filter:none!important}
+#authGatekeeperOverlay::before{content:"";position:fixed;inset:0;background:radial-gradient(circle at 50% 20%,var(--zgl,rgba(230,194,138,.22)),transparent 60%);pointer-events:none}
+#authGatekeeperOverlay .auth-gate-card{--text-primary:#fff;--text-secondary:#eadcc6;--text-muted:#bba98f;--bg-surface:rgba(255,255,255,.09);--bg-elevated:rgba(255,255,255,.1);--border-subtle:rgba(255,255,255,.2);--border-strong:rgba(255,255,255,.3);--brand-primary:#e6c28a;--brand-primary-light:rgba(230,194,138,.2);position:relative;background:linear-gradient(155deg,rgba(255,255,255,.16),rgba(255,255,255,.05))!important;backdrop-filter:blur(26px) saturate(150%);-webkit-backdrop-filter:blur(26px) saturate(150%);border:1px solid rgba(255,255,255,.28)!important;border-radius:28px!important;box-shadow:0 30px 80px rgba(0,0,0,.55),inset 0 1px 0 rgba(255,255,255,.35)!important;color:#fff;animation:zxIn .8s ease both}
+#authGatekeeperOverlay .auth-gate-card>div[style*="f4f4f5"]{background:rgba(0,0,0,.28)!important}
+#authGatekeeperOverlay .auth-gate-card .fulfillment-tab-btn{color:#eadcc6}#authGatekeeperOverlay .auth-gate-card .fulfillment-tab-btn.active{background:linear-gradient(135deg,#f0d3a0,#c59b63);color:#2a1408}
+#authGatekeeperOverlay .auth-gate-card .ios-input-field{background:rgba(0,0,0,.3);color:#fff;border-color:rgba(255,255,255,.2);border-radius:14px;padding:12px 14px}
+#authGatekeeperOverlay .auth-gate-card .ios-input-field::placeholder{color:#a8977f}#authGatekeeperOverlay .auth-gate-card .ios-input-field:focus{border-color:#e6c28a;box-shadow:0 0 0 3px rgba(230,194,138,.2)}
+#authGatekeeperOverlay .auth-gate-card .btn-brand-solid{background:linear-gradient(135deg,#f3d9a8,#c59b63 55%,#a47a43);color:#2a1408;border-radius:14px;padding:13px;box-shadow:0 10px 26px rgba(197,155,99,.35)}
+#authGatekeeperOverlay .auth-gate-card .btn-brand-outline{color:#f3e4cb;border-color:rgba(255,255,255,.3);border-radius:14px}
+#authGatekeeperOverlay .zx-gl{width:74px;height:74px;border-radius:50%;margin:0 auto 12px;display:flex;align-items:center;justify-content:center;overflow:hidden;background:rgba(255,255,255,.1);border:1px solid rgba(230,194,138,.7);box-shadow:0 0 0 5px rgba(230,194,138,.14),0 12px 30px rgba(0,0,0,.4)}
+#authGatekeeperOverlay .zx-gl img{width:100%;height:100%;object-fit:cover}#authGatekeeperOverlay .zx-gl .zx-mono{font-size:30px}`;
+document.head.appendChild(css);
+
+function themeGate() {
+    const c = cfg(), g = $('authGatekeeperOverlay'); if (!g) return;
+    const p = photoOf(c);
+    g.style.setProperty('--zg', p ? `${gradeOf(c)},url("${String(p).replace(/"/g, '')}")` : gradeOf(c));
+    g.style.setProperty('--zgl', rgba(c.accent, .22));
+    const top = g.querySelector('.auth-gate-card > div:first-child'), app = safeGet('cc_app_config', {});
+    if (top) { top.className = 'zx-gl'; top.removeAttribute('style'); top.innerHTML = app.icon && /^(data:image|https:)/.test(app.icon) ? `<img src="${app.icon}" alt="">` : `<span class="zx-mono">${e((app.name || 'ك').trim().charAt(0))}</span>`; }
+}
+
+let pxRaf = 0;
+function showIntro(force, preview) {
+    if (!force && (sessionStorage.getItem('cc_intro_seen') || IS_PORTAL)) return after();
+    sessionStorage.setItem('cc_intro_seen', '1');
+    const c = cfg(preview), app = safeGet('cc_app_config', {}), D = Math.max(3, Math.min(9, Number(c.dur) || 5)), acc = c.accent, p = photoOf(c);
+    const old = $('zIntro'); if (old) old.remove();
+    const el = document.createElement('div'); el.id = 'zIntro'; el.style.cssText = `--c1:${c.c1};--c2:${c.c2};--za:${acc};--zt:${D}s`;
+    const orbs = c.bokeh === false || c.style === 'minimal' ? '' : Array.from({ length: 13 }, (_, i) => { const s = 50 + (i * 37) % 110; return `<div class="zx-orb" style="width:${s}px;height:${s}px;left:${(i * 29 + 7) % 92}%;top:${(i * 41 + 11) % 88}%;background:${i % 3 ? acc : c.c1};--t:${8 + i % 6}s;--o:${(.14 + (i % 4) * .06).toFixed(2)};--dx:${(i % 2 ? 1 : -1) * (20 + i * 3)}px;--dy:${-30 - i * 4}px"></div>`; }).join('');
+    const first = activeCustomer ? e(activeCustomer.name.split(' ')[0]) : '', name = String(app.name || 'كافيه كورنر');
+    const words = name.split(/\s+/).map((w, i) => `<span class="zx-w" style="animation-delay:${(.7 + i * .22).toFixed(2)}s">${e(w)}</span>`).join('');
+    const logo = app.icon && /^(data:image|https:)/.test(app.icon) ? `<img src="${app.icon}" alt="">` : `<span class="zx-mono">${e(name.trim().charAt(0))}</span>`;
+    const pe = window.omarPersona ? omarPersona() : { name: 'ZEINA AI', img: '' };
+    el.innerHTML = (c.style === 'minimal' || !p ? '' : '<div class="zx-bg"></div>') + `<div class="zx-grade" style="background:${gradeOf(c)}"></div><div class="zx-vig"></div>${orbs}<div class="zx-sweep"></div>${c.grain === false ? '' : '<div class="zx-grain"></div>'}
+    <div class="zx-stage"><div class="zx-medal"><div class="zx-halo"></div><div class="zx-glass">${logo}</div><svg class="zx-ring" viewBox="0 0 146 146"><circle cx="73" cy="73" r="70" stroke="rgba(255,255,255,.14)"/><circle class="p" cx="73" cy="73" r="70"/></svg></div>
+    <h1 class="zx-name">${words}</h1><div class="zx-line"></div><p class="zx-tag">${e(c.text)}</p>
+    ${c.ai === false ? '' : `<div class="zx-chip"><img data-zp="1" src="${pe.img || GIF}" alt=""><span>${e(pe.name)} ${first ? 'ترحّب بك يا ' + first : 'جاهزة لخدمتك'}</span></div>`}</div><div class="zx-skip">اضغط للمتابعة</div>`;
+    document.body.appendChild(el);
+    const bg = el.querySelector('.zx-bg'); if (bg && p) { const im = new Image(); im.onload = () => { bg.style.backgroundImage = `url("${String(p).replace(/"/g, '')}")`; }; im.onerror = () => bg.remove(); im.src = p; }
+    if (c.parallax !== false) el.addEventListener('pointermove', ev => { cancelAnimationFrame(pxRaf); pxRaf = requestAnimationFrame(() => { el.style.setProperty('--px', (ev.clientX / innerWidth - .5).toFixed(3)); el.style.setProperty('--py', (ev.clientY / innerHeight - .5).toFixed(3)); }); });
+    let done = false; const end = () => { if (done) return; done = true; el.classList.add('out'); setTimeout(() => { el.remove(); if (!preview) after(); }, 900); };
+    el.onclick = end; setTimeout(end, D * 1000 + 400);
+}
+function after() { if (!IS_PORTAL && !safeGet('cc_tour_done', false) && window.omarOpenTour) setTimeout(() => omarOpenTour(), 250); }
+
+/* ---------- محرر المقدمة في لوحة الإدارة ---------- */
+const ids = ['c1', 'c2', 'accent'], cbs = ['ai', 'bokeh', 'grain', 'parallax', 'photo'];
+function fill() {
+    if (!$('zxText')) return; const c = cfg(pend || undefined);
+    ids.forEach(k => { $('zx_' + k).value = c[k]; }); $('zxText').value = c.text; $('zxDur').value = c.dur; $('zxStyle').value = c.style;
+    cbs.forEach(k => { $('zxCb_' + k).checked = c[k] !== false; });
+    $('zxBgPrev').style.display = c.bg ? 'block' : 'none'; if (c.bg) $('zxBgPrev').src = c.bg;
+}
+const read = () => { const o = { bg: (pend || IC).bg || '', text: sanitizeText($('zxText').value), dur: Number($('zxDur').value) || 5, style: $('zxStyle').value }; ids.forEach(k => { o[k] = $('zx_' + k).value; }); cbs.forEach(k => { o[k] = $('zxCb_' + k).checked; }); return o; };
+window.zxSave = function () {
+    if (!enforceMasterAdminGuard()) return; const t0 = Date.now(), c = { ...read(), updatedAt: Date.now() }; IC = c; pend = null; safeSet('cc_app_intro', c); themeGate();
+    if (cloudDb) cloudDb.collection('settings').doc('app_intro').set(c).then(() => omarPublished('المقدمة وشاشة الدخول', t0)).catch(err => showModernToast('فشل النشر: ' + (err.code || err.message), 'danger'));
+    else showModernToast('حُفظ محلياً فقط', 'danger');
+};
+window.zxPreview = function () { showIntro(true, read()); };
+window.zxClearBg = function () { pend = { ...read(), bg: '' }; fill(); };
+window.zxReset = function () { pend = { ...DEF }; fill(); showModernToast('تم تحميل الألوان الافتراضية، اضغط حفظ للتثبيت', 'info'); };
+
+document.addEventListener('DOMContentLoaded', () => {
+    themeGate();
+    const old = [...document.querySelectorAll('#adminPanel-appSettings .clean-card')].find(x => /المقدمة \(انترو/.test(x.textContent)); if (old) old.remove();
+    const ap = $('adminPanel-appSettings');
+    if (ap) {
+        const col = (k, l) => `<label style="font-size:11px;font-weight:700">${l}<input type="color" id="zx_${k}" style="width:100%;height:36px;border:none;background:none"></label>`, cb = (k, l) => `<label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700"><input type="checkbox" id="zxCb_${k}">${l}</label>`;
+        ap.insertAdjacentHTML('beforeend', `<div class="clean-card"><div class="clean-title">المقدمة وشاشة الدخول (سينمائي)</div>
+        <div style="font-size:10.5px;color:var(--text-secondary);margin-bottom:8px">تُطبّق نفس الألوان والخلفية على المقدمة وشاشة تسجيل الدخول، وتصل كل الزوار بعد النشر.</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:8px">${col('c1', 'اللون الأساسي')}${col('c2', 'اللون الداكن')}${col('accent', 'اللون الذهبي')}</div>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:8px"><img id="zxBgPrev" style="width:60px;height:60px;border-radius:12px;object-fit:cover;display:none"><input type="file" id="zxBgFile" accept="image/*" style="display:none">
+        <button class="btn-brand-outline" onclick="document.getElementById('zxBgFile').click()">رفع صورة خلفية</button><button class="btn-brand-outline" onclick="zxClearBg()">إزالة صورتي</button></div>
+        <input type="text" class="ios-input-field" id="zxText" placeholder="النص تحت الاسم" style="margin-bottom:8px">
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:8px"><select class="ios-input-field" id="zxStyle"><option value="cinema">سينمائي (صورة وإضاءة)</option><option value="minimal">بسيط (ألوان فقط)</option></select><input type="number" min="3" max="9" id="zxDur" class="ios-input-field num-font" placeholder="المدة (ثانية)"></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">${cb('photo', 'صورة خلفية')}${cb('bokeh', 'إضاءة متحركة')}${cb('grain', 'تأثير سينمائي')}${cb('parallax', 'حركة مع المؤشر')}${cb('ai', 'شارة المساعد الذكي')}</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap"><button class="btn-brand-solid" style="flex:1" onclick="zxSave()">حفظ ونشر</button><button class="btn-brand-outline" onclick="zxPreview()">معاينة</button><button class="btn-brand-outline" onclick="zxReset()">الافتراضي</button></div></div>`);
+        $('zxBgFile').onchange = async ev => { const d = await compressUploadedImage(ev.target.files[0], 1100, 0.62); if (d) { pend = { ...read(), bg: d, photo: true }; fill(); } };
+        const _o = window.openAdminSubPanel; window.openAdminSubPanel = function (k) { _o(k); if (k === 'appSettings') fill(); };
+    }
+    const t = setInterval(() => { if (!cloudDb) return; clearInterval(t); cloudDb.collection('settings').doc('app_intro').onSnapshot(s => { if (s.exists) { IC = s.data(); safeSet('cc_app_intro', IC); themeGate(); } }, () => {}); }, 600);
+});
+showIntro(false);
+})();
+
+</script>
+<script>
+/* =========================================================
+   F) ZEINA AI: واجهة محادثة جديدة + قاعدة معرفة + مهارات أذكى + تذاكر الموظفين + فحص الربط
+   ========================================================= */
+(function () {
+const $ = id => document.getElementById(id);
+const n = s => normalizeArabicForAi(s);
+const e = s => sanitizeText(String(s == null ? '' : s));
+const slug = s => String(s).replace(/[^\w-]/g, '');
+const money = v => Number(v).toFixed(2) + ' د.أ';
+const row = (a, b) => `<div class="hala-structured-row"><span>${a}</span><strong>${b}</strong></div>`;
+const card = r => `<div class="hala-structured-card">${r.join('')}</div>`;
+const btn = (t, f, o) => `<button type="button" class="${o ? 'btn-brand-outline' : 'btn-brand-solid'}" style="padding:7px 13px;font-size:11.5px;width:auto;" onclick="${f}">${t}</button>`;
+const staffBtn = btn('تحويل لموظف', "escalateHalaToHumanAgent('')", true);
+const waNum = p => { p = String(p || '').replace(/\D/g, ''); return p.startsWith('0') ? '962' + p.slice(1) : p; };
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+const mine = () => activeCustomer ? activeOrdersList.filter(o => o.customerPhone === activeCustomer.phone) : [];
+function dice(a, b) { if (a === b) return 1; if (a.length < 2 || b.length < 2) return 0; const g = s => { const m = {}; for (let i = 0; i < s.length - 1; i++) { const k = s.slice(i, i + 2); m[k] = (m[k] || 0) + 1; } return m; }, A = g(a), B = g(b); let x = 0; Object.keys(A).forEach(k => { if (B[k]) x += Math.min(A[k], B[k]); }); return 2 * x / (a.length + b.length - 2); }
+
+/* ---------- 1) واجهة المحادثة ---------- */
+const css = document.createElement('style');
+css.textContent = `#screen-hala-ai{background:linear-gradient(180deg,#f6f1ea,#fbfbf9)}body.dark-mode #screen-hala-ai{background:#0b0b0d}
+.hala-chat-topbar{background:linear-gradient(135deg,#2a0f12,#16080a)!important;border-bottom:1px solid rgba(230,194,138,.35)}
+.hala-messages-feed{padding:16px 14px!important;gap:14px!important;scroll-behavior:smooth}
+.hala-msg-row{max-width:93%!important;animation:zMsg .35s ease both}@keyframes zMsg{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+.hala-msg-bubble{font-size:13.5px!important;line-height:1.95!important;padding:13px 16px!important;border-radius:20px!important}
+.hala-msg-row.bot .hala-msg-bubble{background:var(--bg-surface)!important;border:1px solid var(--border-subtle)!important;border-top-right-radius:6px!important;box-shadow:0 6px 22px rgba(60,30,10,.08);position:relative;padding-right:19px!important}
+.hala-msg-row.bot .hala-msg-bubble::before{content:"";position:absolute;right:0;top:14px;bottom:14px;width:3px;border-radius:3px;background:linear-gradient(180deg,#e6c28a,#c59b63)}
+.hala-msg-row.user .hala-msg-bubble{background:linear-gradient(135deg,var(--brand-primary),var(--brand-primary-dark))!important;box-shadow:0 6px 18px rgba(0,0,0,.15)}
+.hala-structured-card{border-radius:14px!important;padding:4px 12px!important;background:var(--bg-main)!important;margin-top:10px!important}
+.hala-structured-row{padding:9px 0!important;font-size:12px!important;gap:12px;align-items:flex-start!important}
+.hala-structured-row>span{flex-shrink:0;color:var(--text-secondary)}.hala-structured-row>strong{text-align:left;max-width:64%;line-height:1.7}
+.zf-list{margin:6px 0 0;display:flex;flex-direction:column;gap:5px}.zf-li{display:flex;gap:8px;align-items:flex-start}.zf-li::before{content:"";width:6px;height:6px;border-radius:50%;background:#c59b63;margin-top:10px;flex-shrink:0}
+.zf-h{font-weight:800;color:var(--brand-primary);margin:4px 0}
+.hala-bot-header-tag{gap:8px!important;margin-bottom:6px!important;font-size:11.5px!important}.hala-bot-header-tag img{width:30px!important;height:30px!important;background:#fff;border:1.5px solid #c59b63!important}
+.zf-typing{display:inline-flex;gap:4px;padding:4px 0}.zf-typing i{width:7px;height:7px;border-radius:50%;background:#c59b63;animation:zDot 1.1s infinite}.zf-typing i:nth-child(2){animation-delay:.18s}.zf-typing i:nth-child(3){animation-delay:.36s}
+@keyframes zDot{0%,80%,100%{transform:scale(.6);opacity:.4}40%{transform:scale(1);opacity:1}}
+.hala-quick-chip{padding:8px 15px!important;font-size:11.5px!important;border-radius:99px!important;box-shadow:0 2px 8px rgba(0,0,0,.05)}
+.hala-composer-bar{box-shadow:0 -8px 24px rgba(0,0,0,.05)}.hala-send-circle-btn{background:linear-gradient(135deg,#e6c28a,#c59b63)!important;color:#2a1408!important}
+.hala-msg-meta{font-size:9.5px!important}`;
+document.head.appendChild(css);
+function fmt(text) {
+    return e(text).split('\n').map(l => /^\s*[-•]\s+/.test(l) ? `<div class="zf-list"><div class="zf-li"><span>${l.replace(/^\s*[-•]\s+/, '')}</span></div></div>` : /^##\s+/.test(l) ? `<div class="zf-h">${l.replace(/^##\s+/, '')}</div>` : l).join('<br>')
+        .replace(/<br>(<div class="zf-)/g, '$1').replace(/(<\/div>)<br>/g, '$1').replace(/\*\*(.+?)\*\*/g, '<b>$1</b>');
+}
+appendHalaChatMessage = function (sender, text, actions, structured) {
+    const feed = $('halaMessagesContainer'); if (!feed) return; if (sender === 'bot' && !text && !structured && !actions) return;
+    const time = new Date().toLocaleTimeString('ar-JO', { hour: '2-digit', minute: '2-digit' }); halaChatHistory.push({ sender, text, time });
+    const pe = window.omarPersona ? omarPersona() : { name: 'ZEINA AI', tag: '' };
+    const r = document.createElement('div'); r.className = 'hala-msg-row ' + sender;
+    r.innerHTML = (sender === 'bot' ? `<div class="hala-bot-header-tag"><img data-zp="1" src="${HALA_REALISTIC_PORTRAIT_URL}" alt=""><span>${e(pe.name)} • ${e(pe.tag || 'مساعدتك الذكية')}</span></div>` : '') +
+        `<div class="hala-msg-bubble">${text ? `<div>${fmt(text)}</div>` : ''}${structured || ''}${actions ? `<div style="margin-top:11px;display:flex;flex-wrap:wrap;gap:7px">${actions}</div>` : ''}</div><div class="hala-msg-meta num-font">${time}</div>`;
+    feed.appendChild(r); feed.scrollTop = feed.scrollHeight;
+};
+window.submitHalaUserMessage = function () {
+    const inp = $('halaUserTextInput'), raw = ((inp && inp.value) || '').trim(); if (!raw) return; inp.value = '';
+    appendHalaChatMessage('user', raw); playSoftFeedbackTone(640);
+    const feed = $('halaMessagesContainer'), ty = document.createElement('div'); ty.className = 'hala-msg-row bot';
+    ty.innerHTML = '<div class="hala-msg-bubble"><span class="zf-typing"><i></i><i></i><i></i></span></div>'; feed.appendChild(ty); feed.scrollTop = feed.scrollHeight;
+    const t0 = Date.now();
+    Promise.resolve().then(() => generateHalaIntelligentReply(raw)).then(async r => { await sleep(Math.max(0, 500 - (Date.now() - t0))); ty.remove(); if (r && (r.reply || r.structuredHtml || r.actionsHtml)) appendHalaChatMessage('bot', r.reply, r.actionsHtml, r.structuredHtml); playSoftFeedbackTone(780); })
+        .catch(err => { console.warn('zeina', err); ty.remove(); appendHalaChatMessage('bot', 'حدث خطأ غير متوقع أثناء معالجة طلبك. جرّب مرة أخرى أو حوّلني لموظف.', staffBtn); });
+};
+
+/* ---------- 2) قاعدة المعرفة ---------- */
+let K = Object.assign({ entries: [], info: {} }, safeGet('cc_ai_kb', {}));
+function saveK(label) {
+    K.updatedAt = stampLocalModification('ai_kb'); safeSet('cc_ai_kb', K); const t0 = Date.now();
+    if (cloudDb) cloudDb.collection('settings').doc('ai_knowledge').set(K).then(() => omarPublished(label, t0)).catch(err => showModernToast('فشل النشر: ' + (err.code || err.message), 'danger'));
+    else showModernToast('حُفظ محلياً فقط', 'danger');
+}
+function kbFind(q) {
+    let best = null, bs = 0; const qw = q.split(/\s+/).filter(w => w.length >= 3);
+    K.entries.forEach(en => {
+        const keys = String(en.keywords || '').split(/[,،]/).map(n).filter(Boolean).concat(n(en.title)); let s = 0;
+        keys.forEach(k => { if (q.includes(k)) s += 3 + k.length / 10; else k.split(/\s+/).filter(w => w.length >= 3).forEach(w => qw.forEach(x => { if (x === w || dice(x, w) >= .8) s += 1; })); });
+        if (s > bs) { bs = s; best = en; }
+    });
+    return bs >= 3 ? best : null;
+}
+const IK = [['hours', 'ساعات الدوام'], ['phone', 'رقم التواصل العام'], ['social', 'حسابات التواصل الاجتماعي'], ['about', 'نبذة عن المتجر'], ['refund', 'سياسة الاسترجاع والإلغاء'], ['delivery', 'سياسة التوصيل'], ['allergy', 'ملاحظات الحساسية والمكونات']];
+window.zkSaveInfo = function () { if (!enforceMasterAdminGuard()) return; IK.forEach(([k]) => { K.info[k] = sanitizeText($('zk_' + k).value); }); K.info.endpoint = ($('zk_endpoint').value || '').trim(); saveK('معلومات المتجر'); };
+window.zkSaveEntry = function () {
+    if (!enforceMasterAdminGuard()) return; const id = $('zkEid').value, t = sanitizeText($('zkTitle').value), k = sanitizeText($('zkKeys').value), a = sanitizeText($('zkAns').value);
+    if (!t || !a) return showModernToast('أدخل العنوان والإجابة', 'danger');
+    if (id) { const x = K.entries.find(y => y.id === id); if (x) Object.assign(x, { title: t, keywords: k, answer: a }); } else K.entries.unshift({ id: 'kb_' + Date.now(), title: t, keywords: k, answer: a });
+    $('zkEid').value = $('zkTitle').value = $('zkKeys').value = $('zkAns').value = ''; renderK(); saveK('قاعدة المعرفة');
+};
+window.zkEdit = function (id) { const x = K.entries.find(y => y.id === id); if (!x) return; $('zkEid').value = x.id; $('zkTitle').value = x.title; $('zkKeys').value = x.keywords || ''; $('zkAns').value = x.answer; };
+window.zkDel = function (id) { if (!enforceMasterAdminGuard()) return; K.entries = K.entries.filter(x => x.id !== id); renderK(); saveK('قاعدة المعرفة'); };
+window.zkTest = async function () { const r = await Promise.resolve(generateHalaIntelligentReply($('zkTestQ').value || '')); $('zkTestA').innerHTML = r && r.reply ? fmt(r.reply) + (r.structuredHtml || '') : 'لا توجد إجابة'; };
+function renderK() {
+    IK.forEach(([k]) => { $('zk_' + k).value = K.info[k] || ''; }); $('zk_endpoint').value = K.info.endpoint || '';
+    $('zkList').innerHTML = K.entries.length ? K.entries.map(x => `<div style="border-bottom:1px solid var(--border-subtle);padding:8px 0"><div style="display:flex;justify-content:space-between;gap:6px"><strong style="font-size:12.5px">${e(x.title)}</strong><span><button class="btn-brand-outline" style="padding:3px 8px;font-size:10.5px" onclick="zkEdit('${slug(x.id)}')">تعديل</button> <button class="btn-brand-outline" style="padding:3px 8px;font-size:10.5px;color:var(--status-danger);border-color:var(--status-danger)" onclick="zkDel('${slug(x.id)}')">حذف</button></span></div><div style="font-size:10.5px;color:var(--text-secondary)">${e(x.keywords || '')}</div></div>`).join('') : '<div style="font-size:11.5px;color:var(--text-muted);text-align:center;padding:10px">لا توجد مدخلات بعد.</div>';
+}
+
+/* ---------- 3) مهارات أذكى ---------- */
+const DESSERT = ['وافل', 'كريب', 'بان كيك', 'كنافة'], avail = () => productsList.filter(p => p.isAvailable !== false);
+const orderBtn = p => btn('اطلب ' + e(p.name), "openProductCustomizer('" + slug(p.id) + "')");
+function topSellers() { const m = {}; salesLedgerList.forEach(o => { if (o.status === 'cancelled') return; (o.items || []).forEach(i => { if (!i.isRedeemedReward) m[i.id] = (m[i.id] || 0) + (Number(i.qty) || 1); }); }); return avail().filter(p => m[p.id]).sort((a, b) => m[b.id] - m[a.id]).slice(0, 3); }
+function recommend(q) {
+    let list = [], why = '';
+    if (/(حلو|حلويات|سكر)/.test(q)) { list = avail().filter(p => DESSERT.includes(p.category)); why = 'اخترت لك من الحلويات'; }
+    else if (/(بارد|منعش|صيف|ثلج)/.test(q)) { list = avail().filter(p => ['بارد', 'كوكتيلات', 'عصائر', 'مشروبات الطاقة'].includes(p.category)); why = 'اخترت لك من المشروبات الباردة والمنعشة'; }
+    else if (/(ساخن|دافئ|شتاء|برد)/.test(q)) { list = avail().filter(p => p.category === 'ساخن'); why = 'اخترت لك من المشروبات الساخنة'; }
+    else if (/(طاقه|نشاط|رياضه)/.test(q)) { list = avail().filter(p => p.category === 'مشروبات الطاقة'); why = 'اخترت لك من مشروبات الطاقة'; }
+    else if (/(قهوه|كافيين)/.test(q)) { list = avail().filter(p => ['بارد', 'ساخن', 'كبسولات'].includes(p.category)); why = 'اخترت لك من القهوة'; }
+    const top = topSellers(); if (!list.length) { list = top.length ? top : avail().slice(0, 3); why = top.length ? 'هذه الأكثر طلباً عند عملائنا' : 'هذه اقتراحاتي من المنيو'; }
+    list = list.slice(0, 4); if (!list.length) return null;
+    return { reply: why + ':', structuredHtml: card(list.map(p => row(e(p.name), money(p.price) + (p.sizes && p.sizes.length ? ' (من)' : '')))), actionsHtml: list.slice(0, 2).map(orderBtn).join('') + btn('كامل المنيو', "navigateRouter('screen-home')", true) };
+}
+function budget(q, raw) {
+    const m = String(raw).replace(/[٠-٩]/g, d => '٠١٢٣٤٥٦٧٨٩'.indexOf(d)).match(/(\d+(?:\.\d+)?)/); if (!m) return null; const B = parseFloat(m[1]); if (!B || B > 200) return null;
+    const ds = avail().filter(p => DESSERT.includes(p.category)), dr = avail().filter(p => !DESSERT.includes(p.category) && p.category !== 'كبسولات'); let best = null;
+    ds.forEach(d => dr.forEach(k => { const t = d.price + k.price; if (t <= B && (!best || t > best.t)) best = { d, k, t }; }));
+    if (best) return { reply: `بميزانية ${B} د.أ أقترح هذا التوليف (بدون رسوم التوصيل):`, structuredHtml: card([row(e(best.d.category), e(best.d.name) + ' — ' + money(best.d.price)), row(e(best.k.category), e(best.k.name) + ' — ' + money(best.k.price)), row('المجموع', money(best.t)), row('المتبقي', money(B - best.t))]), actionsHtml: orderBtn(best.d) + orderBtn(best.k) };
+    const cheap = [...avail()].sort((a, b) => a.price - b.price).filter(p => p.price <= B).slice(0, 4);
+    return cheap.length ? { reply: 'أقرب خيارات ضمن ميزانيتك:', structuredHtml: card(cheap.map(p => row(e(p.name), money(p.price)))), actionsHtml: cheap.slice(0, 2).map(orderBtn).join('') } : { reply: `أقل صنف عندنا يبدأ من ${money(Math.min(...avail().map(p => p.price)))}.` };
+}
+function pick(frag) { frag = frag.trim(); let best = null, bs = 0; const ws = frag.split(/\s+/).filter(w => w.length >= 3); avail().forEach(p => { const nm = n(p.name); let s = 0; ws.forEach(w => { if (nm.includes(w)) s += 2; else nm.split(/\s+/).forEach(x => { if (dice(w, x) >= .75) s++; }); }); if (s > bs) { bs = s; best = p; } }); return bs >= 1.5 ? best : null; }
+function compare(q) {
+    const parts = q.replace(/(قارن|الفرق|بين|ايش|شو)/g, ' ').split(/\s(?:و|مع|ولا|او|vs)\s/); if (parts.length < 2) return null;
+    const a = pick(parts[0]), b = pick(parts[1]); if (!a || !b || a === b) return null;
+    const f = p => (p.sizes && p.sizes.length ? p.sizes.map(z => e(z.name) + ' ' + z.price).join('، ') : 'حجم واحد');
+    return { reply: 'مقارنة سريعة بين الصنفين:', structuredHtml: card([row('الصنف', e(a.name) + ' | ' + e(b.name)), row('السعر', money(a.price) + ' | ' + money(b.price)), row('القسم', e(a.category) + ' | ' + e(b.category)), row('الأحجام', f(a) + ' | ' + f(b)), row('النكهات', (a.allowFlavors !== false ? 'حتى ' + (a.maxFlavors || 1) : 'لا') + ' | ' + (b.allowFlavors !== false ? 'حتى ' + (b.maxFlavors || 1) : 'لا'))]), actionsHtml: orderBtn(a) + orderBtn(b) };
+}
+function ingredients(q) {
+    const p = pick(q.replace(/(مكونات|محتوى|فيه|شو|ايش|حساسيه|مكسرات)/g, ' ')), note = K.info.allergy;
+    if (/(حساسيه|مكسرات|جلوتين|لاكتوز|نباتي|vegan)/.test(q)) {
+        const hit = avail().filter(x => /(بستاشيو|مكسرات|نوتيلا|لوتس)/.test(n(x.name + ' ' + (x.desc || '')))).slice(0, 4).map(x => e(x.name));
+        return { reply: (note ? '**ملاحظة المتجر:** ' + note + '\n' : '') + 'لا أستطيع الجزم بخلو الأصناف من مسببات الحساسية. بعض الأصناف أو النكهات تحتوي مكسرات أو حليباً أو غلوتين' + (hit.length ? '، مثل: ' + hit.join('، ') : '') + '. للسلامة أكّد مع موظف الفرع قبل الطلب وسجّل ملاحظتك في الصنف.', actionsHtml: staffBtn };
+    }
+    if (!p) return null;
+    return { reply: 'عن ' + e(p.name) + ':\n' + (p.desc ? e(p.desc) : 'لا يوجد وصف مفصل مسجل.') + (note ? '\n**ملاحظة المتجر:** ' + note : ''), actionsHtml: orderBtn(p) };
+}
+const miss = what => ({ reply: `${what} لم تُسجَّل عندي بعد. أحوّلك لموظف يؤكدها لك؟`, actionsHtml: staffBtn });
+function infoSkill(q) {
+    const I = K.info, one = (v, w) => v ? { reply: '**' + w + ':**\n' + v } : miss(w);
+    if (/(دوام|ساعات|متى تفتحون|متى تسكرون|مفتوح|وقت العمل)/.test(q)) return one(I.hours, 'ساعات الدوام');
+    if (/(استرجاع|ارجاع|استرداد|يرجع المبلغ|الغاء الطلب بعد)/.test(q)) return one(I.refund, 'سياسة الاسترجاع والإلغاء');
+    if (/(سياسه التوصيل|شروط التوصيل|حد ادنى)/.test(q)) return one(I.delivery, 'سياسة التوصيل');
+    if (/(انستا|فيس|تيك|سوشيال|حساباتكم|تويتر)/.test(q)) return one(I.social, 'حسابات التواصل');
+    if (/(عن المتجر|من انتم|قصتكم|نبذه)/.test(q)) return one(I.about, 'نبذة عن المتجر');
+    if (/(كالوري|سعرات)/.test(q)) return { reply: 'بيانات السعرات الحرارية غير متوفرة في نظام المتجر حالياً. اسأل موظف الفرع للتأكد.', actionsHtml: staffBtn };
+    return null;
+}
+async function llm(raw) {
+    const url = K.info.endpoint; if (!url || !/^https:\/\//.test(url)) return null;
+    const c = new AbortController(), t = setTimeout(() => c.abort(), 15000);
+    try {
+        const body = { question: raw, history: halaChatHistory.slice(-8).map(m => ({ role: m.sender === 'bot' ? 'assistant' : 'user', content: String(m.text || '').slice(0, 400) })),
+            store: { name: (safeGet('cc_app_config', {}).name || 'كافيه كورنر'), branches: branchesContacts.map(b => ({ name: b.name, address: b.address, whatsapp: b.whatsapp, zones: (b.zonesList || []).filter(z => z.active !== false).map(z => ({ n: z.name, fee: z.fee, eta: z.eta })) })),
+                menu: avail().slice(0, 70).map(p => ({ n: p.name, c: p.category, p: p.price, sizes: p.sizes || [] })), flavors: systemFlavors.map(f => f.name), addons: systemAddons.map(a => a.name), payments: systemPaymentMethods.map(m => m.name), loyalty: loyaltyRules, info: K.info, faq: K.entries.slice(0, 25).map(x => ({ q: x.title, a: x.answer })) },
+            customer: activeCustomer ? { name: activeCustomer.name.split(' ')[0], points: activeCustomer.points || 0, tier: calculateUserTier(activeCustomer), lastOrder: (mine()[0] || {}).status || null } : null };
+        const res = await fetch(url, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: c.signal });
+        if (!res.ok) return null; const j = await res.json(); return j && j.answer ? { reply: String(j.answer).slice(0, 2500), actionsHtml: staffBtn } : null;
+    } catch (x) { return null; } finally { clearTimeout(t); }
+}
+
+/* ---------- 4) تحويل الموظف: تذاكر مرتبة ---------- */
+let H = { mode: null, cat: '', issue: '', pri: 'normal', order: '', ctx: '', tries: 0 };
+const CATS = { order: 'مشكلة في طلب', payment: 'الدفع والفاتورة', points: 'النقاط والمكافآت', account: 'الحساب وتسجيل الدخول', quality: 'جودة أو خدمة', suggest: 'اقتراح' };
+const say = (t, s, a) => appendHalaChatMessage('bot', t, a || '', s || '');
+const stOf = f => f.status || (f.reply ? 'resolved' : 'new');
+function showChat() { $('halaWelcomeStage').style.display = 'none'; $('halaActiveChatStage').classList.add('active'); }
+window.escalateHalaToHumanAgent = function (reason) {
+    navigateRouter('screen-hala-ai'); if (halaChatHistory.length === 0) startNewHalaConversation(); else showChat();
+    if (window.__zst) __zst.mode = null; H = { mode: 'cat', cat: '', issue: '', pri: 'normal', order: '', ctx: e(reason || ''), tries: 0 };
+    if (!activeCustomer) return say('لتحويلك لموظف أحتاج أن أعرف حسابك أولاً.', '', btn('تسجيل الدخول', 'enforceAuthGatekeeper(true)'));
+    say('بكل سرور. لأوصل موضوعك للموظف بترتيب وبدون أسئلة مكررة، اختر نوع المشكلة:', card([row('الخطوة 1 من 4', 'نوع المشكلة'), row('الخطوة 2', 'شرح مختصر'), row('الخطوة 3', 'الأولوية'), row('الخطوة 4', 'مراجعة وإرسال')]),
+        Object.entries(CATS).map(([k, v]) => btn(v, "zhCat('" + k + "')", true)).join(''));
+};
+window.zhCat = function (c) {
+    H.cat = c; H.mode = 'desc'; const os = c === 'order' || c === 'payment' ? mine().slice(0, 3) : [];
+    say('تمام: **' + CATS[c] + '**.' + (os.length ? ' اختر الطلب المعني، أو اكتب شرحك مباشرة:' : ' اشرح لي المشكلة بإيجاز (ماذا حدث؟ وما الحل الذي تتوقعه؟):'), '', os.map(o => btn('#' + e(o.orderId) + ' • ' + e(o.total) + ' د.أ', "zhOrd('" + slug(o.orderId) + "')", true)).join(''));
+};
+window.zhOrd = function (id) { H.order = id; say('سأربط التذكرة بالطلب **' + e(id) + '**. الآن اشرح لي المشكلة بإيجاز:'); };
+window.zhPri = function (p) {
+    H.pri = p; H.mode = 'confirm'; const b = branchesContacts[currentBranchIndex] || branchesContacts[0];
+    say('هذا ملخص التذكرة. راجعه ثم أرسله:', card([row('النوع', CATS[H.cat]), row('الطلب', H.order ? e(H.order) : 'غير محدد'), row('الأولوية', p === 'urgent' ? 'عاجل' : 'عادي'), row('الفرع', e(b.name)), row('المشكلة', e(H.issue))]),
+        btn('إرسال للموظف', 'zhSend()') + btn('تعديل الشرح', 'zhEdit()', true) + btn('إلغاء', 'zhCancel()', true));
+};
+window.zhEdit = function () { H.mode = 'desc'; say('اكتب الشرح من جديد وسأحدّثه.'); };
+window.zhCancel = function () { H = { mode: null }; say('تم إلغاء التحويل. أنا حاضرة لأي شيء آخر.'); };
+window.zhSend = function () {
+    if (!activeCustomer) return enforceAuthGatekeeper(true); if (!H.issue) return say('اكتب شرح المشكلة أولاً.');
+    const b = branchesContacts[currentBranchIndex] || branchesContacts[0], ts = Date.now(), no = 'T-' + String(ts).slice(-5);
+    const tr = halaChatHistory.slice(-10).map(m => (m.sender === 'bot' ? 'المساعد: ' : 'العميل: ') + String(m.text || '').slice(0, 180)).filter(x => x.length > 10).join('\n');
+    const fb = { id: 'fb_' + ts, ticketNo: no, branchId: b.id, branchName: b.name, name: activeCustomer.name, phone: activeCustomer.phone, category: CATS[H.cat], priority: H.pri, status: 'new', orderId: H.order || '', source: 'ZEINA',
+        text: H.issue + (H.ctx ? ' | سياق: ' + H.ctx : ''), transcript: tr, reply: '', createdAt: ts, date: new Date().toLocaleDateString('ar-JO') };
+    systemFeedbacks.unshift(fb); safeSet('cc_feedbacks', systemFeedbacks); if (cloudDb) cloudDb.collection('feedbacks').doc(fb.id).set(fb).catch(() => {}); updateAdminHubCounters();
+    H = { mode: null }; say('تم إرسال تذكرتك لموظفي ' + e(b.name) + '.', card([row('رقم التذكرة', '<span class="num-font">' + no + '</span>'), row('الحالة', 'جديدة'), row('الأولوية', fb.priority === 'urgent' ? 'عاجل' : 'عادي'), row('الرد', 'يصلك إشعار وتجده في المساعدة والدعم')]), btn('متابعة التذاكر', "navigateRouter('screen-feedback')"));
+};
+function handleHandoff(raw) {
+    if (/^(الغاء|إلغاء|cancel|خلص|لا)$/i.test(raw.trim())) { zhCancel(); return { reply: '' }; }
+    if (H.mode === 'desc') {
+        const t = e(raw); if (t.length < 12 && H.tries < 2) { H.tries++; return { reply: 'محتاج تفاصيل أكثر بقليل حتى يفهم الموظف الموضوع من أول مرة. شو اللي صار بالضبط؟' }; }
+        H.issue = t; H.mode = 'pri'; return { reply: 'شكراً. ما أولوية موضوعك؟', actionsHtml: btn('عادي', "zhPri('normal')", true) + btn('عاجل', "zhPri('urgent')") };
+    }
+    return { reply: 'أكمل الخطوة الظاهرة أعلاه بالأزرار، أو اكتب "إلغاء" للخروج من التحويل.' };
+}
+
+/* تذاكر: عرض مشترك للإدارة والفرع والعميل */
+const ST = { new: ['جديدة', 'var(--status-warning)'], progress: ['قيد المعالجة', 'var(--status-info)'], resolved: ['محلولة', 'var(--status-success)'] }, TF = { admin: 'all', branch: 'all' };
+function tkHtml(f, role) {
+    const s = stOf(f), cs = e(f.id).replace(/[^\w-]/g, ''), urgent = f.priority === 'urgent';
+    return `<div style="border:1px solid ${urgent && s !== 'resolved' ? 'var(--status-danger)' : 'var(--border-subtle)'};border-radius:var(--radius-md);padding:11px;margin-bottom:9px;background:var(--bg-surface)">
+    <div style="display:flex;justify-content:space-between;align-items:center;gap:6px;flex-wrap:wrap"><strong class="num-font" style="color:var(--brand-primary);font-size:12.5px">${e(f.ticketNo || ('#' + String(f.id).slice(-5)))}</strong>
+    <span style="display:flex;gap:5px">${urgent ? '<span style="font-size:10px;font-weight:800;color:#fff;background:var(--status-danger);padding:2px 8px;border-radius:99px">عاجل</span>' : ''}<span style="font-size:10px;font-weight:800;color:${ST[s][1]};border:1px solid ${ST[s][1]};padding:2px 8px;border-radius:99px">${ST[s][0]}</span></span></div>
+    <div style="font-size:11.5px;font-weight:700;margin-top:5px">${e(f.name)} (<span class="num-font">${e(f.phone)}</span>) • ${e(f.branchName || '')}</div>
+    <div style="font-size:10.5px;color:var(--text-secondary)">${e(f.category || '')} • ${e(f.date || '')}${f.orderId ? ' • طلب ' + e(f.orderId) : ''}</div>
+    <div style="font-size:12.5px;line-height:1.8;margin:7px 0">${e(f.text)}</div>
+    ${f.transcript ? `<details style="font-size:10.5px;color:var(--text-secondary);margin-bottom:7px"><summary style="cursor:pointer">سجل المحادثة مع المساعد</summary><div style="white-space:pre-wrap;margin-top:4px">${e(f.transcript)}</div></details>` : ''}
+    ${f.reply ? `<div style="background:var(--bg-elevated);padding:8px 10px;border-radius:8px;font-size:11.5px;color:var(--status-success);font-weight:700;margin-bottom:6px">الرد: ${e(f.reply)}</div>` : ''}
+    ${role === 'customer' ? '' : `<div style="display:flex;gap:6px;margin-bottom:6px"><input type="text" class="ios-input-field" id="zTkR_${cs}" placeholder="اكتب الرد للعميل..." style="padding:7px 10px;font-size:11.5px"></div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap"><button class="btn-brand-solid" style="width:auto;padding:5px 11px;font-size:10.5px;background:var(--status-success)" onclick="zTkReply('${cs}',1)">رد وإغلاق</button><button class="btn-brand-outline" style="padding:5px 10px;font-size:10.5px" onclick="zTkReply('${cs}',0)">رد فقط</button>
+    ${s !== 'progress' ? `<button class="btn-brand-outline" style="padding:5px 10px;font-size:10.5px" onclick="zTkStatus('${cs}','progress')">قيد المعالجة</button>` : ''}${s === 'resolved' ? `<button class="btn-brand-outline" style="padding:5px 10px;font-size:10.5px" onclick="zTkStatus('${cs}','new')">إعادة فتح</button>` : ''}
+    <button class="btn-brand-outline" style="padding:5px 10px;font-size:10.5px" onclick="window.open('https://wa.me/${waNum(f.phone)}','_blank')">واتساب العميل</button>${f.orderId ? `<button class="btn-brand-outline" style="padding:5px 10px;font-size:10.5px" onclick="openOfficialInvoiceModal('${slug(f.orderId)}')">الفاتورة</button>` : ''}</div>`}</div>`;
+}
+function renderTickets(el, list, role) {
+    if (!el) return; const f = TF[role], cnt = k => list.filter(x => k === 'all' || stOf(x) === k).length;
+    const chips = ['all', 'new', 'progress', 'resolved'].map(k => `<button class="cat-chip ${f === k ? 'active' : ''}" style="padding:5px 12px;font-size:11px" onclick="zTkFilter('${role}','${k}')">${k === 'all' ? 'الكل' : ST[k][0]} (${cnt(k)})</button>`).join('');
+    const rows = list.filter(x => f === 'all' || stOf(x) === f).sort((a, b) => (b.priority === 'urgent') - (a.priority === 'urgent') || (b.createdAt || 0) - (a.createdAt || 0));
+    el.innerHTML = `<div style="display:flex;gap:5px;overflow-x:auto;padding-bottom:8px;margin-bottom:6px">${chips}</div>` + (rows.length ? rows.map(x => tkHtml(x, role)).join('') : '<div style="text-align:center;padding:18px;font-size:12px;color:var(--text-muted)">لا توجد تذاكر في هذا القسم.</div>');
+}
+const rerender = () => { if ($('adminPanel-feedback') && $('adminPanel-feedback').classList.contains('active')) renderAdminFeedbackInbox(); if ($('screen-branch-admin') && $('screen-branch-admin').classList.contains('active')) renderBranchAdminDashboard(); };
+window.zTkFilter = function (role, k) { TF[role] = k; rerender(); };
+function tkSave(f, extra) { Object.assign(f, extra); safeSet('cc_feedbacks', systemFeedbacks); if (cloudDb) cloudDb.collection('feedbacks').doc(f.id).update(extra).catch(() => {}); updateAdminHubCounters(); rerender(); }
+window.zTkReply = function (id, close) {
+    const f = systemFeedbacks.find(x => String(x.id).replace(/[^\w-]/g, '') === id); if (!f) return; if (!isBranchAdminAuthorized(f.branchId)) return showModernToast('غير مصرّح لك بالرد على هذه التذكرة', 'danger');
+    const t = sanitizeText(($('zTkR_' + id) || {}).value || ''); if (!t) return showModernToast('اكتب الرد أولاً', 'danger');
+    tkSave(f, { reply: t, repliedAt: Date.now(), status: close ? 'resolved' : 'progress' }); showModernToast('تم إرسال الرد للعميل', 'success');
+};
+window.zTkStatus = function (id, s) { const f = systemFeedbacks.find(x => String(x.id).replace(/[^\w-]/g, '') === id); if (!f) return; if (!isBranchAdminAuthorized(f.branchId)) return showModernToast('غير مصرّح', 'danger'); tkSave(f, { status: s }); };
+renderAdminFeedbackInbox = function () { runAutoCleanupPolicies(); renderTickets($('adminFeedbackInboxList'), systemFeedbacks, 'admin'); };
+const _rb = renderBranchAdminDashboard;
+renderBranchAdminDashboard = function () { _rb(); if (activeBranchAdminSession && $('branchPortalFeedbackList')) renderTickets($('branchPortalFeedbackList'), systemFeedbacks.filter(f => Number(f.branchId) === Number(activeBranchAdminSession.branchId)), 'branch'); };
+renderCustomerFeedbackScreen = function () {
+    const c = $('customerFeedbackHistoryList'); if (!c) return; const my = activeCustomer ? systemFeedbacks.filter(f => f.phone === activeCustomer.phone) : [];
+    c.innerHTML = my.length ? my.map(f => tkHtml(f, 'customer')).join('') : '<div class="clean-card" style="text-align:center;font-size:11.5px;color:var(--text-muted)">لم تقم بإرسال أي رسائل سابقة.</div>';
+};
+
+/* ---------- 5) فحص الربط الفعلي ---------- */
+window.zCheckCloud = async function () {
+    const box = $('zCloudRes'), rows = []; box.innerHTML = 'جارٍ الفحص...';
+    const add = (l, ok, d) => rows.push(`<div style="display:flex;justify-content:space-between;padding:6px 0;border-bottom:1px dashed var(--border-subtle);font-size:12px"><span>${l}</span><strong style="color:${ok ? 'var(--status-success)' : 'var(--status-danger)'}">${d}</strong></div>`);
+    if (!cloudDb) { add('اتصال Firebase', false, 'غير متصل'); box.innerHTML = rows.join(''); return; }
+    try { const u = firebase.auth().currentUser; add('الدخول المجهول', !!u, u ? 'نشط' : 'غير نشط'); } catch (x) { add('الدخول المجهول', false, 'خطأ'); }
+    try { const t0 = Date.now(), r = cloudDb.collection('settings').doc('_ping'); await r.set({ t: t0 }); add('الكتابة', true, (Date.now() - t0) + ' ms'); const t1 = Date.now(), d = await r.get(); add('القراءة', d.exists && d.data().t === t0, (Date.now() - t1) + ' ms'); } catch (x) { add('الكتابة والقراءة', false, x.code || 'فشل (راجع قواعد Firestore)'); }
+    for (const [lbl, col, doc] of [['إعدادات الموقع', 'settings', 'app_config'], ['المقدمة', 'settings', 'app_intro'], ['المساعد الذكي', 'settings', 'ai_persona'], ['قاعدة المعرفة', 'settings', 'ai_knowledge'], ['الفروع', 'settings', 'branches']]) { try { const d = await cloudDb.collection(col).doc(doc).get(); add(lbl, d.exists, d.exists ? 'منشور' : 'لم يُنشر بعد'); } catch (x) { add(lbl, false, x.code || 'خطأ'); } }
+    try { const s = await cloudDb.collection('products_v2').get(); add('الأصناف', s.size > 0, s.size + ' صنف'); } catch (x) { add('الأصناف', false, x.code || 'خطأ'); }
+    box.innerHTML = rows.join('');
+};
+
+/* ---------- ربط كل شيء ---------- */
+const inner = generateHalaIntelligentReply;
+generateHalaIntelligentReply = async function (raw) {
+    if (H.mode && H.mode !== 'cat') return handleHandoff(raw);
+    const q = n(raw), kb = kbFind(q); if (kb) return { reply: '**' + e(kb.title) + '**\n' + kb.answer };
+    const guarded = [infoSkill, ingredients, compare], pre = /(رشح|اقترح|شو اطلب|ايش اطلب|شو الاحلى|ايش تنصح|احلى شي|الاكثر مبيعا|الاكثر طلبا|نصيحه)/.test(q);
+    if (/(قارن|الفرق بين)/.test(q)) { const r = compare(q); if (r) return r; }
+    const i1 = infoSkill(q); if (i1) return i1;
+    if (/(مكونات|محتوى|حساسيه|مكسرات|جلوتين|لاكتوز|نباتي|فيه ايش|شو فيه)/.test(q)) { const r = ingredients(q); if (r) return r; }
+    if (/(ميزانيه|معي|عندي|بحدود|ما فوق|بدون)/.test(q) && /(دينار|د\.ا|jod|ميزانيه)/.test(q + ' ' + (/\d/.test(raw) ? 'jod' : ''))) { const r = budget(q, raw); if (r) return r; }
+    if (pre) { const r = recommend(q); if (r) return r; }
+    const r = inner(raw);
+    if (r && /ما فهمت طلبك تماماً/.test(r.reply || '')) { const l = await llm(raw); if (l) return l; const rec = recommend(q); if (rec && /(حلو|بارد|ساخن|قهوه|طاقه)/.test(q)) return rec; }
+    return r;
+};
+document.addEventListener('DOMContentLoaded', () => {
+    const bar = document.querySelector('.hala-quick-chips-bar');
+    if (bar) bar.innerHTML = [['رشّح لي', 'رشح لي شي حلو'], ['ميزانيتي', 'عندي 5 دنانير شو اطلب'], ['تتبع طلبي', 'تتبع طلبي'], ['المنيو والأسعار', 'المنيو والأسعار'], ['التوصيل', 'مناطق التوصيل والفروع'], ['النقاط والمهام', 'مهامي'], ['ساعات الدوام', 'ساعات الدوام']]
+        .map(c => `<button type="button" class="hala-quick-chip" onclick="sendHalaQuickPrompt('${c[1]}')">${c[0]}</button>`).join('') + '<button type="button" class="hala-quick-chip urgent" onclick="escalateHalaToHumanAgent(\'\')">التحدث مع موظف</button>';
+    const sc = $('screen-master-admin') && $('screen-master-admin').querySelector('.scrollable-content');
+    if (sc) {
+        sc.insertAdjacentHTML('beforeend', `<div id="adminPanel-aiKnowledge" class="admin-sub-panel"><div class="admin-panel-topbar"><button class="btn-brand-outline" style="padding:5px 10px;font-size:11px;" onclick="backToAdminHub()">→ الرئيسية</button><strong style="font-size:13.5px;color:var(--brand-primary);">معرفة المساعد الذكي</strong><div style="width:45px;"></div></div>
+        <div class="clean-card"><div class="clean-title">معلومات المتجر (يستخدمها المساعد في إجاباته)</div><div style="display:flex;flex-direction:column;gap:8px">${IK.map(([k, l]) => `<label style="font-size:11px;font-weight:700">${l}<textarea class="ios-textarea-field" id="zk_${k}" style="height:54px"></textarea></label>`).join('')}
+        <label style="font-size:11px;font-weight:700">رابط خدمة الذكاء الاصطناعي (اختياري، للأسئلة المفتوحة)<input type="url" class="ios-input-field num-font" id="zk_endpoint" placeholder="https://...cloudfunctions.net/zeina" dir="ltr"></label><button class="btn-brand-solid" onclick="zkSaveInfo()">حفظ ونشر</button></div></div>
+        <div class="clean-card"><div class="clean-title">أسئلة وأجوبة مخصصة</div><input type="hidden" id="zkEid"><div style="display:flex;flex-direction:column;gap:8px"><input class="ios-input-field" id="zkTitle" placeholder="السؤال أو العنوان"><input class="ios-input-field" id="zkKeys" placeholder="كلمات مفتاحية مفصولة بفاصلة (مثال: موقف، باركنج، سيارة)"><textarea class="ios-textarea-field" id="zkAns" placeholder="الإجابة التي يعرضها المساعد"></textarea><button class="btn-brand-solid" onclick="zkSaveEntry()">حفظ المدخل</button></div><div id="zkList" style="margin-top:10px"></div></div>
+        <div class="clean-card"><div class="clean-title">جرّب المساعد</div><div style="display:flex;gap:6px"><input class="ios-input-field" id="zkTestQ" placeholder="اكتب سؤالاً..."><button class="btn-brand-outline" onclick="zkTest()">اختبار</button></div><div id="zkTestA" style="font-size:12px;line-height:1.8;margin-top:8px"></div></div></div>`);
+        const g = document.querySelector('[onclick="openAdminSubPanel(\'aiSettings\')"]'); if (g) g.parentNode.insertAdjacentHTML('beforeend', '<div class="admin-module-card" onclick="openAdminSubPanel(\'aiKnowledge\')"><div class="admin-module-icon">' + OMAR_IC('bookmark', 20) + '</div><div><div style="font-size:13px;font-weight:800;color:var(--text-primary);">معرفة المساعد</div><div style="font-size:10px;color:var(--text-secondary);margin-top:2px;">معلومات المتجر وأسئلة وأجوبة</div></div></div>');
+        const _o = window.openAdminSubPanel; window.openAdminSubPanel = function (k) { _o(k); if (k === 'aiKnowledge') renderK(); };
+    }
+    const ap = $('adminPanel-appSettings'); if (ap) ap.insertAdjacentHTML('beforeend', '<div class="clean-card"><div class="clean-title">فحص الربط الأونلاين</div><button class="btn-brand-solid" onclick="zCheckCloud()">فحص الآن</button><div id="zCloudRes" style="margin-top:8px"></div></div>');
+    const t = setInterval(() => { if (!cloudDb) return; clearInterval(t); cloudDb.collection('settings').doc('ai_knowledge').onSnapshot(s => { if (s.exists) { const d = s.data(); if ((d.updatedAt || 0) >= getLocalModificationStamp('ai_kb')) { K = Object.assign({ entries: [], info: {} }, d); safeSet('cc_ai_kb', K); } } }, () => {}); }, 600);
 });
 })();
 
