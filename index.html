@@ -6600,18 +6600,17 @@ function renderCartScreen() {
     const sub = cartList.reduce((s, i) => s + (i.price * i.qty), 0);
     let discountVal = 0;
     const discountRow = document.getElementById('cartDiscountRow');
-    if (activeCartCoupon && sub > 0) {
-        discountVal = sub * (activeCartCoupon.discount / 100);
-        if (discountRow) { discountRow.style.display = 'flex'; document.getElementById('cartDiscountAmountText').innerText = `- JOD ${discountVal.toFixed(2)}`; }
-    } else if (discountRow) discountRow.style.display = 'none';
-
     let deliveryFee = 0;
     if (currentFulfillmentMode === 'delivery' && cartList.length > 0 && townSelect && townSelect.selectedOptions[0]) {
         const parsedFee = parseFloat(townSelect.selectedOptions[0].dataset.fee);
         deliveryFee = isNaN(parsedFee) ? 0.50 : parsedFee;
     }
-
-    const finalTotal = Math.max(0, sub - discountVal) + deliveryFee;
+    const _cc = omarCouponCalc(sub, deliveryFee);
+    discountVal = _cc.items + _cc.delivery;
+    if (discountVal > 0 && sub > 0) {
+        if (discountRow) { discountRow.style.display = 'flex'; document.getElementById('cartDiscountAmountText').innerText = `- JOD ${discountVal.toFixed(2)}`; }
+    } else if (discountRow) discountRow.style.display = 'none';
+    const finalTotal = Math.max(0, sub - _cc.items) + Math.max(0, deliveryFee - _cc.delivery);
     document.getElementById('cartSubtotalText').innerText = `JOD ${sub.toFixed(2)}`;
     document.getElementById('cartDeliveryFeeText').innerText = `JOD ${deliveryFee.toFixed(2)}`;
     document.getElementById('cartGrandTotalText').innerText = `JOD ${finalTotal.toFixed(2)}`;
@@ -6722,7 +6721,7 @@ window.confirmOrderAndForwardWhatsApp = function() {
 
     const branch = branchesContacts[currentBranchIndex] || branchesContacts[0];
     const sub = cartList.reduce((s, i) => s + (i.price * i.qty), 0);
-    const discountVal = activeCartCoupon ? (sub * (activeCartCoupon.discount / 100)) : 0;
+    let discountVal = 0;
 
     const townSelect = document.getElementById('cartTownSelector');
     const townName = (currentFulfillmentMode === 'delivery' && townSelect) ? townSelect.value : "استلام من الفرع";
@@ -6730,7 +6729,9 @@ window.confirmOrderAndForwardWhatsApp = function() {
     const deliveryFee = isNaN(parsedFee) ? 0.50 : parsedFee;
     const addrNotes = sanitizeText(document.getElementById('cartAddressNotesInput')?.value || '');
 
-    const grand = (Math.max(0, sub - discountVal) + deliveryFee).toFixed(2);
+    const _cc = omarCouponCalc(sub, deliveryFee);
+    discountVal = _cc.items + _cc.delivery;
+    const grand = (Math.max(0, sub - _cc.items) + Math.max(0, deliveryFee - _cc.delivery)).toFixed(2);
     const payMethod = document.querySelector('input[name="payRadioMethod"]:checked')?.value || "دفع نقدي (كاش Cash)";
     const earnedOrderPoints = parseFloat(grand) > 0 ? Math.max(5, Math.round(parseFloat(grand) * (loyaltyRules.pointsPerJod || 73))) : 0;
 
@@ -9932,12 +9933,12 @@ function poll() {
         if (S) {
             if (S.role === 'branch' && document.getElementById('screen-branch-admin')?.classList.contains('active'))
                 S.expiresAt = Math.max(S.expiresAt, Date.now() + SECURITY_CONFIG.SESSION_TIMEOUT_MS);   // شاشة الفرع المفتوحة لا تنتهي أثناء الدوام
-            const mine = x => S.role === 'master' || Number(x.branchId) === Number(S.branchId);
-            const open = () => { if (S.role === 'master') { navigateRouter('screen-master-admin'); openAdminSubPanel('orders'); } else navigateRouter('screen-branch-admin'); };
+            const mine = x => S.role === 'master' || S.role === 'manager' || Number(x.branchId) === Number(S.branchId);
+            const open = () => { if (S.role === 'master' || S.role === 'manager') { navigateRouter('screen-master-admin'); openAdminSubPanel('orders'); } else navigateRouter('screen-branch-admin'); };
             activeOrdersList.filter(o => mine(o) && (o.createdAt || 0) > LASTVISIT && once('so:' + o.orderId))
                 .forEach(o => out({ type: 'order', title: 'طلب جديد #' + o.orderId + ' — ' + o.branchName, body: o.customerName + ' • ' + o.total + ' د.أ • ' + (o.mode === 'pickup' ? 'استلام' : 'توصيل: ' + o.town), go: go(open) }));
             systemFeedbacks.filter(f => mine(f) && !f.reply && (f.createdAt || 0) > LASTVISIT && once('sf:' + f.id))
-                .forEach(f => out({ type: 'order', title: 'رسالة جديدة من عميل', body: f.name + ': ' + f.text, go: go(() => S.role === 'master' ? (navigateRouter('screen-master-admin'), openAdminSubPanel('feedback')) : (navigateRouter('screen-branch-admin'), switchBranchAdminTab('feedback'))) }));
+                .forEach(f => out({ type: 'order', title: 'رسالة جديدة من عميل', body: f.name + ': ' + f.text, go: go(() => (S.role === 'master' || S.role === 'manager') ? (navigateRouter('screen-master-admin'), openAdminSubPanel('feedback')) : (navigateRouter('screen-branch-admin'), switchBranchAdminTab('feedback'))) }));
         }
         safeSet('cc_status_map', smap);
         safeSet('cc_last_visit', Date.now());
@@ -11756,6 +11757,209 @@ document.addEventListener('DOMContentLoaded', () => {
     const t = setInterval(() => { if (!cloudDb) return; clearInterval(t); cloudDb.collection('ratings').onSnapshot(snap => { const m = {}; snap.forEach(d => { m[d.id] = d.data(); }); RT = Object.assign({}, RT, m); STC = null; safeSet('cc_ratings', RT); renderProductsDisplay(); renderRatingsAdmin(); }, () => {}); }, 600);
     const rp = new URLSearchParams(location.search).get('rate');
     if (rp) { let tries = 0; const w = setInterval(() => { if (++tries > 60) return clearInterval(w); if (activeCustomer && allOrders().some(o => o.orderId === rp)) { clearInterval(w); omarOpenRate(rp); try { history.replaceState(null, '', location.pathname + location.hash); } catch (x) {} } }, 500); }
+});
+})();
+
+</script>
+<script>
+/* =========================================================
+   H) كوبونات بنطاق محدد + بوابة إدارة المحل + الإشعارات + تأكيد الاستلام + رقم الإصدار
+   ========================================================= */
+ADMIN_HASHES.manager = '61f41be66b53b4253814b19306ebcee38d977d5a4c9b29f57801f7bbdfa3de79';
+(function () {
+const $ = id => document.getElementById(id);
+const e = s => sanitizeText(String(s == null ? '' : s));
+const slug = s => String(s).replace(/[^\w-]/g, '');
+const money = v => Number(v).toFixed(2) + ' د.أ';
+const isMgr = () => !!(activeSecuritySession && activeSecuritySession.role === 'manager');
+
+/* ---------- 1) كوبونات: نطاق التطبيق ---------- */
+const SCOPE = { all: 'المنتجات', delivery: 'رسوم التوصيل', item: 'صنف محدد', category: 'قسم محدد' };
+const catOfItem = it => { const p = productsList.find(x => String(x.id) === String(it.id)); return p ? p.category : ''; };
+const lines = c => cartList.filter(i => !i.isRedeemedReward);
+const subOf = () => cartList.reduce((s, i) => s + i.price * i.qty, 0);
+function curFee() { const t = $('cartTownSelector'); if (currentFulfillmentMode !== 'delivery' || !t || !t.selectedOptions[0]) return 0; const f = parseFloat(t.selectedOptions[0].dataset.fee); return isNaN(f) ? 0.5 : f; }
+function couponLabel(c) { const v = c.type === 'fixed' ? money(c.value) : (c.discount || c.value) + '%', sc = c.scope || 'all'; return 'خصم ' + v + ' على ' + (sc === 'item' ? 'الصنف: ' + e(c.targetName || '') : sc === 'category' ? 'قسم: ' + e(c.target) : SCOPE[sc]); }
+function couponCheck(c) {
+    const sc = c.scope || 'all';
+    if (c.minOrder && subOf() < Number(c.minOrder)) return { ok: false, msg: 'الحد الأدنى للطلب لهذا الكود ' + money(c.minOrder) };
+    if (sc === 'item' && !lines().some(i => String(i.id) === String(c.target))) return { ok: false, msg: 'هذا الكود خاص بالصنف: ' + (c.targetName || '') + '. أضفه إلى السلة أولاً' };
+    if (sc === 'category' && !lines().some(i => catOfItem(i) === c.target)) return { ok: false, msg: 'هذا الكود خاص بقسم ' + c.target + '. أضف صنفاً من القسم أولاً' };
+    if (sc === 'delivery' && !(currentFulfillmentMode === 'delivery' && curFee() > 0)) return { ok: false, msg: 'هذا الكود خاص برسوم التوصيل، اختر التوصيل ومنطقة بها رسوم' };
+    return { ok: true };
+}
+window.omarCouponCalc = function (sub, fee) {
+    const c = activeCartCoupon, z = { items: 0, delivery: 0 }, hint = $('cartCouponAppliedHint'); if (!c) return z;
+    const ck = couponCheck(c);
+    if (!ck.ok) { if (hint) { hint.style.display = 'block'; hint.style.color = 'var(--status-warning)'; hint.innerText = ck.msg; } return z; }
+    if (hint) { hint.style.display = 'block'; hint.style.color = 'var(--status-success)'; hint.innerText = couponLabel(c) + ' (' + c.code + ')'; }
+    const sc = c.scope || 'all', base = sc === 'delivery' ? fee : sc === 'item' ? lines().filter(i => String(i.id) === String(c.target)).reduce((s, i) => s + i.price * i.qty, 0) : sc === 'category' ? lines().filter(i => catOfItem(i) === c.target).reduce((s, i) => s + i.price * i.qty, 0) : sub;
+    const d = Math.min(base, c.type === 'fixed' ? Number(c.value) || 0 : base * (Number(c.discount || c.value) || 0) / 100);
+    if (sc === 'delivery') z.delivery = Math.max(0, d); else z.items = Math.max(0, d);
+    return z;
+};
+window.applyCartCouponCode = function () {
+    const code = ($('cartCouponInput').value || '').trim().toUpperCase(), hint = $('cartCouponAppliedHint');
+    if (!code) return showModernToast('يرجى إدخال كود الخصم', 'danger');
+    const cp = systemCoupons[code], fail = m => { activeCartCoupon = null; if (hint) hint.style.display = 'none'; renderCartScreen(); showModernToast(m, 'danger'); };
+    if (!cp) return fail('كود الخصم غير صحيح');
+    if (cp.expiry && cp.expiry < getTodayIsoDate()) return fail('انتهت صلاحية كود الخصم');
+    if (cp.maxUses && (cp.usedCount || 0) >= cp.maxUses) return fail('تم استهلاك الحد الأقصى لاستخدام هذا الكود');
+    if (cp.oncePerCustomer && activeCustomer && activeCustomer.usedCoupons && activeCustomer.usedCoupons[code]) return fail('تم استخدام هذا الكود سابقاً');
+    const c = { code, ...cp }, ck = couponCheck(c); if (!ck.ok) return fail(ck.msg);
+    activeCartCoupon = c; renderCartScreen(); showModernToast('تم تطبيق الكود: ' + couponLabel(c), 'success');
+};
+const _conf = window.confirmOrderAndForwardWhatsApp;
+window.confirmOrderAndForwardWhatsApp = function () {
+    const code = activeCartCoupon && activeCartCoupon.code, once = activeCartCoupon && activeCartCoupon.oncePerCustomer, before = activeOrdersList[0] && activeOrdersList[0].orderId, r = _conf.apply(this, arguments);
+    if (code && once && activeCustomer && activeOrdersList[0] && activeOrdersList[0].orderId !== before) {
+        activeCustomer.usedCoupons = Object.assign({}, activeCustomer.usedCoupons, { [code]: Date.now() }); allRegisteredCustomers[activeCustomer.phone] = activeCustomer;
+        safeSet('cc_crm_directory', allRegisteredCustomers); safeSet('cc_active_client_user', activeCustomer); if (cloudDb) cloudDb.collection('users').doc(activeCustomer.phone).set(activeCustomer).catch(() => {});
+    }
+    return r;
+};
+function fillTarget() {
+    const sc = $('admCpScope').value, t = $('admCpTarget'); $('admCpTargetWrap').style.display = (sc === 'item' || sc === 'category') ? 'block' : 'none';
+    t.innerHTML = sc === 'category' ? [...new Set(productsList.map(p => p.category))].map(c => `<option value="${e(c)}">${e(c)}</option>`).join('') : productsList.map(p => `<option value="${e(p.id)}">${e(p.name)}</option>`).join('');
+}
+window.saveAdminCoupon = function () {
+    if (!enforceMasterAdminGuard()) return;
+    const code = sanitizeText($('admNewCouponCode').value).toUpperCase(), val = parseFloat($('admNewCouponPercent').value), type = $('admCpType').value, sc = $('admCpScope').value;
+    if (!code || !(val > 0) || (type === 'percent' && val > 100)) return showModernToast('أدخل الكود وقيمة خصم صحيحة', 'danger');
+    const target = (sc === 'item' || sc === 'category') ? $('admCpTarget').value : '', tn = sc === 'item' ? (productsList.find(p => String(p.id) === String(target)) || {}).name || '' : '';
+    if ((sc === 'item' || sc === 'category') && !target) return showModernToast('اختر الصنف أو القسم', 'danger');
+    const old = systemCoupons[code] || {}, t0 = Date.now();
+    systemCoupons[code] = { discount: type === 'percent' ? val : 0, type, value: val, scope: sc, target, targetName: tn, minOrder: parseFloat($('admCpMin').value) || 0, oncePerCustomer: $('admCpOnce').checked, maxUses: parseInt($('admNewCouponMaxUses').value, 10) || 100, usedCount: old.usedCount || 0, expiry: $('admNewCouponExpiry').value || '2027-12-31' };
+    const st = stampLocalModification('coupons'); safeSet('cc_coupons', systemCoupons); if (cloudDb) cloudDb.collection('settings').doc('coupons').set({ data: systemCoupons, updatedAt: st }).catch(() => {});
+    ['admNewCouponCode', 'admNewCouponPercent', 'admNewCouponMaxUses', 'admCpMin'].forEach(i => { $(i).value = ''; }); renderAdminCouponsList(); omarPublished('كود الخصم', t0);
+};
+renderAdminCouponsList = function () {
+    const c = $('admCouponsActiveList'); if (!c) return; const en = Object.entries(systemCoupons);
+    c.innerHTML = en.length ? en.map(([code, cp]) => `<div style="display:flex;justify-content:space-between;align-items:center;gap:6px;padding:8px 0;border-bottom:1px solid var(--border-subtle);font-size:11.5px"><div><strong class="num-font" style="color:var(--brand-primary)">${e(code)}</strong> — ${couponLabel({ ...cp, code })}<div style="font-size:10px;color:var(--text-secondary)">الاستخدام: ${cp.usedCount || 0}/${cp.maxUses}${cp.minOrder ? ' • حد أدنى ' + money(cp.minOrder) : ''}${cp.oncePerCustomer ? ' • مرة لكل عميل' : ''} • ينتهي: ${e(cp.expiry)}</div></div><button onclick="deleteCouponAdmin('${slug(code)}')" style="color:var(--status-danger);background:none;border:none;cursor:pointer;font-weight:700">حذف</button></div>`).join('') : '<div style="font-size:11px;color:var(--text-muted);text-align:center;padding:8px">لا توجد أكواد.</div>';
+};
+
+/* ---------- 2) بوابة إدارة المحل ---------- */
+const MG_PANELS = ['statistics', 'orders', 'feedback', 'products', 'branchesPayments'];
+let zRole = 'master', ok = false;
+const _ima = isMasterAdminAuthorized;
+isMasterAdminAuthorized = function () { if (isMgr()) { if (!checkSessionDailyRolloverAndExpiry() || !ok) return false; activeSecuritySession.expiresAt = Date.now() + SECURITY_CONFIG.SESSION_TIMEOUT_MS; return true; } return _ima(); };
+const _iba = isBranchAdminAuthorized;
+isBranchAdminAuthorized = function (b) { if (isMgr()) { if (b === undefined || b === null || !checkSessionDailyRolloverAndExpiry()) return false; activeSecuritySession.expiresAt = Date.now() + SECURITY_CONFIG.SESSION_TIMEOUT_MS; return true; } return _iba(b); };
+['saveAdminProductForm', 'duplicateAdminProduct', 'toggleAdminProductAvailability', 'deleteAdminProduct', 'updateAdminOrderStatus', 'saveAdminPaymentMethod', 'deleteAdminPaymentMethod'].forEach(n => {
+    const f = window[n]; if (typeof f !== 'function') return;
+    window[n] = function (...a) { if (!isMgr()) return f.apply(this, a); ok = true; try { return f.apply(this, a); } finally { ok = false; } };
+});
+function applyMgrMode(on) {
+    document.body.classList.toggle('mgr-mode', on);
+    document.querySelectorAll('#adminMainHubView .admin-module-card').forEach(c => { const m = (c.getAttribute('onclick') || '').match(/openAdminSubPanel\('(\w+)'\)/); c.style.display = on && m && !MG_PANELS.includes(m[1]) ? 'none' : ''; });
+    document.querySelectorAll('#adminMainHubView > .clean-card').forEach(c => { c.style.display = on && /تصفير|حذف جميع|روابط/.test(c.textContent) ? 'none' : ''; });
+    document.querySelectorAll('#adminMainHubView .admin-hub-grid').forEach(g => { const vis = [...g.children].some(c => c.style.display !== 'none'), h = g.previousElementSibling; g.style.display = vis ? '' : 'none'; if (h && h.tagName === 'DIV' && !h.className) h.style.display = vis ? '' : 'none'; });
+    const t = document.querySelector('#screen-master-admin .header strong'); if (t) t.textContent = on ? 'لوحة إدارة المحل' : 'لوحة الإدارة';
+}
+const _nr = window.navigateRouter;
+window.navigateRouter = function (id) { if (isMgr() && id === 'screen-master-admin') { ok = true; try { _nr(id); } finally { ok = false; } applyMgrMode(true); return; } _nr(id); if (id === 'screen-master-admin' && !isMgr()) applyMgrMode(false); };
+const _osp = window.openAdminSubPanel;
+window.openAdminSubPanel = function (k) {
+    if (isMgr() && !MG_PANELS.includes(k)) return showModernToast('هذه الخدمة غير متاحة لحسابك', 'danger');
+    _osp(k); const bp = $('adminPanel-branchesPayments'); if (bp && bp.querySelector('.clean-card')) bp.querySelector('.clean-card').style.display = isMgr() ? 'none' : '';
+    if (k === 'marketing') fillTarget();
+    if (k === 'portals' && $('zPortals') && !$('zPortals').innerHTML.includes('إدارة المحل')) $('zPortals').insertAdjacentHTML('beforeend', `<div style="padding:10px 0"><div style="font-size:12.5px;font-weight:800">بوابة إدارة المحل</div><div class="num-font" style="font-size:10px;color:var(--text-secondary);word-break:break-all;margin:3px 0 6px">${e(getExternalPortalFullUrl('manager'))}</div><div style="display:flex;gap:6px"><button class="btn-brand-outline" style="font-size:11px" onclick="copyExternalPortalUrl('manager')">نسخ الرابط</button><button class="btn-brand-solid" style="width:auto;padding:6px 12px;font-size:11px" onclick="openExternalPortalInNewTab('manager')">فتح</button></div></div>`);
+};
+const _gp = window.getExternalPortalFullUrl; window.getExternalPortalFullUrl = t => t === 'manager' ? location.href.split('?')[0].split('#')[0] + '?portal=manager#manager' : _gp(t);
+const _oe = openExternalPortalLink;
+openExternalPortalLink = function (t) { if (t !== 'manager') return _oe(t); guestBrowsingActive = true; const g = $('authGatekeeperOverlay'); if (g) g.classList.remove('active'); window.location.hash = 'manager'; openAdminPinModal('تسجيل دخول إدارة المحل', 'أدخل رمز الدخول'); };
+const _hu = handleUrlHashRouting;
+handleUrlHashRouting = function () { const p = (new URLSearchParams(location.search).get('portal') || '').toLowerCase(); if (p === 'manager' || (location.hash || '').toLowerCase() === '#manager') return openExternalPortalLink('manager'); return _hu(); };
+function syncTags() { document.querySelectorAll('#adminPinModalOverlay .admin-role-grid .admin-role-tag').forEach((t, i) => t.classList.toggle('sel', ['master', 'kafarsum', 'sama', 'manager'][i] === zRole)); }
+const _pin = window.openAdminPinModal;
+window.openAdminPinModal = function (t, s) { _pin(t, s); zRole = /إدارة المحل/.test(t || '') ? 'manager' : /كفرسوم/.test(t || '') ? 'kafarsum' : /سما/.test(t || '') ? 'sama' : 'master'; syncTags(); };
+const _vf = window.verifyAdminSecretPin;
+window.verifyAdminSecretPin = async function () {
+    if (zRole !== 'manager') return _vf.apply(this, arguments);
+    if (checkAndRenderSecurityLockout()) return;
+    const pin = ($('adminSecretPinField').value || '').trim(); if (!pin) return showModernToast('يرجى إدخال رمز الدخول', 'danger');
+    const h = await computeSaltedHash(pin);
+    if (ADMIN_HASHES.manager && h === ADMIN_HASHES.manager) {
+        safeSet('cc_sec_failed_attempts', 0); safeSet('cc_sec_lock_until', 0);
+        activeSecuritySession = { role: 'manager', branchId: null, sessionDate: getTodayIsoDate(), endOfDayAt: getEndOfTodayTimestamp(), token: 'sec_mg_' + Date.now() + Math.random().toString(36).slice(2), expiresAt: Date.now() + SECURITY_CONFIG.SESSION_TIMEOUT_MS };
+        activeBranchAdminSession = null; closeAdminPinModal(); closeSidebarDrawer(); navigateRouter('screen-master-admin'); backToAdminHub(); showModernToast('تم تسجيل الدخول: إدارة المحل', 'success');
+    } else {
+        const a = (safeGet('cc_sec_failed_attempts', 0) || 0) + 1; safeSet('cc_sec_failed_attempts', a); $('adminSecretPinField').value = ''; updateSecurityAttemptDots(a);
+        if (a >= SECURITY_CONFIG.MAX_PIN_ATTEMPTS) { safeSet('cc_sec_lock_until', Date.now() + SECURITY_CONFIG.LOCKOUT_DURATION_MS); checkAndRenderSecurityLockout(); showModernToast('تم إيقاف الدخول مؤقتاً لمدة 5 دقائق', 'danger'); }
+        else showModernToast('الرمز غير صحيح. المحاولات المتبقية: ' + (SECURITY_CONFIG.MAX_PIN_ATTEMPTS - a), 'danger');
+    }
+};
+
+/* ---------- 3) الإشعارات: مقروء وحذف ---------- */
+const nkey = () => 'cc_notif_state_' + (activeCustomer ? activeCustomer.phone : 'guest'), nst = () => Object.assign({ read: {}, hidden: {} }, safeGet(nkey(), {}));
+getCustomerTargetedNotifications = function () { if (!activeCustomer) return []; const st = nst(); return systemNotifications.filter(x => (!x.targetPhone || x.targetPhone === 'all' || x.targetPhone === activeCustomer.phone) && !st.hidden[x.id]); };
+updateCustomerNotifBadge = function () { const b = $('drawerNotifBadgeCount'); if (!b) return; const st = nst(), c = getCustomerTargetedNotifications().filter(x => !st.read[x.id]).length; b.innerText = c; b.style.display = c ? '' : 'none'; };
+function drawNotes() {
+    const c = $('customerNotificationsListContainer'), list = getCustomerTargetedNotifications(), st = nst(); if (!c) return;
+    c.innerHTML = (list.length ? `<div style="display:flex;gap:6px;margin-bottom:8px"><button class="btn-brand-outline" style="flex:1;padding:6px;font-size:11px" onclick="zNtReadAll()">تحديد الكل كمقروء</button><button class="btn-brand-outline" style="flex:1;padding:6px;font-size:11px;color:var(--status-danger);border-color:var(--status-danger)" onclick="zNtClear()">مسح الكل</button></div>` : '') +
+        (list.length ? list.map(x => { const u = !st.read[x.id]; return `<div style="border-bottom:1px solid var(--border-subtle);padding:10px 0"><div style="display:flex;justify-content:space-between;gap:8px;font-size:12.5px;font-weight:${u ? 800 : 600};color:var(--brand-primary)"><span>${u ? '<span style="display:inline-block;width:7px;height:7px;border-radius:50%;background:var(--status-danger);margin-left:6px"></span>' : ''}${e(x.title)}</span><span class="num-font" style="font-size:10px;color:var(--text-muted)">${e(x.dateStr || '')}</span></div><div style="font-size:11.5px;margin-top:4px;line-height:1.6">${e(x.body)}</div>
+        <div style="display:flex;gap:6px;margin-top:6px">${u ? `<button class="btn-brand-outline" style="padding:3px 10px;font-size:10.5px" onclick="zNtRead('${slug(x.id)}')">تحديد كمقروء</button>` : ''}<button class="btn-brand-outline" style="padding:3px 10px;font-size:10.5px" onclick="zNtDel('${slug(x.id)}')">حذف</button></div></div>`; }).join('') : '<div style="text-align:center;padding:24px;font-size:12px;color:var(--text-muted)">لا توجد إشعارات.</div>');
+}
+const upd = f => { const s = nst(); f(s); safeSet(nkey(), s); drawNotes(); updateCustomerNotifBadge(); };
+window.zNtRead = id => upd(s => { s.read[id] = 1; }); window.zNtDel = id => upd(s => { s.hidden[id] = 1; s.read[id] = 1; });
+window.zNtReadAll = () => upd(s => { getCustomerTargetedNotifications().forEach(x => { s.read[x.id] = 1; }); }); window.zNtClear = () => upd(s => { getCustomerTargetedNotifications().forEach(x => { s.hidden[x.id] = 1; s.read[x.id] = 1; }); });
+window.openCustomerNotificationsModal = function () { drawNotes(); $('modalCustomerNotifications').style.display = 'flex'; };
+
+/* ---------- 4) التتبع: إخفاء المكتمل + تأكيد الاستلام + التقييم ---------- */
+function withoutCompleted(fn) { const real = activeOrdersList; if (activeCustomer) activeOrdersList = real.filter(o => !(o.customerPhone === activeCustomer.phone && o.status === 'completed')); try { return fn(); } finally { activeOrdersList = real; } }
+const _tr = renderLiveOrderTrackingScreen;
+renderLiveOrderTrackingScreen = function () {
+    withoutCompleted(_tr); const box = $('liveOrderTrackingMainContent'); if (!box || !activeCustomer) return;
+    const o = activeOrdersList.filter(x => x.customerPhone === activeCustomer.phone && x.status !== 'completed')[0];
+    if (o && o.status === 'ready') box.insertAdjacentHTML('beforeend', `<div class="clean-card" style="border-color:var(--status-success)"><div style="font-size:13px;font-weight:800;margin-bottom:4px">${o.mode === 'pickup' ? 'طلبك جاهز للاستلام' : 'طلبك في الطريق إليك'}</div><div style="font-size:11.5px;color:var(--text-secondary);margin-bottom:10px">بعد استلام الطلب اضغط التأكيد لإغلاقه وتقييم الخدمة.</div><button class="btn-brand-solid" style="background:var(--status-success)" onclick="zReceived('${slug(o.orderId)}')">تأكيد استلام الطلب</button></div>`);
+};
+const _bn = updateHomeLiveTrackerBanner; updateHomeLiveTrackerBanner = function () { withoutCompleted(_bn); };
+window.zReceived = function (id) {
+    if (!activeCustomer) return; const o = activeOrdersList.find(x => slug(x.orderId) === id && x.customerPhone === activeCustomer.phone); if (!o || o.status !== 'ready') return;
+    o.status = 'completed'; o.statusChangedAt = Date.now(); o.receivedByCustomer = true; safeSet('cc_orders', activeOrdersList); recordOrderIntoPermanentSalesLedger(o);
+    if (cloudDb) cloudDb.collection('orders').doc(o.orderId).update({ status: 'completed', statusChangedAt: o.statusChangedAt, receivedByCustomer: true }).catch(err => showModernToast('تعذر تحديث الطلب: ' + (err.code || err.message), 'danger'));
+    renderLiveOrderTrackingScreen(); updateHomeLiveTrackerBanner(); showModernToast('تم تأكيد استلام الطلب', 'success'); setTimeout(() => omarOpenRate(o.orderId), 500);
+};
+
+/* ---------- 5) رقم الإصدار ---------- */
+let VER = Object.assign({ version: '1.5.11', build: '78' }, safeGet('cc_app_version', {}));
+function paintVer() { const el = document.querySelector('#sidebarDrawer [onclick="handleSecretAdminTriggerClick()"]'); if (el) el.textContent = 'نسخة التطبيق ' + VER.version + ' (' + VER.build + ')'; }
+window.zvSave = function () {
+    if (!enforceMasterAdminGuard()) return; const v = sanitizeText($('zvVer').value), b = sanitizeText($('zvBuild').value); if (!v) return showModernToast('أدخل رقم الإصدار', 'danger');
+    VER = { version: v, build: b || '1', updatedAt: Date.now() }; safeSet('cc_app_version', VER); paintVer(); const t0 = Date.now();
+    if (cloudDb) cloudDb.collection('settings').doc('app_version').set(VER).then(() => omarPublished('رقم الإصدار', t0)).catch(err => showModernToast('فشل النشر: ' + (err.code || err.message), 'danger'));
+};
+
+/* ---------- 6) مهارات إضافية للمساعد ---------- */
+const nq = s => normalizeArabicForAi(s), B = (t, f) => `<button type="button" class="btn-brand-solid" style="padding:7px 13px;font-size:11.5px;width:auto" onclick="${f}">${t}</button>`;
+const _g = generateHalaIntelligentReply;
+generateHalaIntelligentReply = function (raw) {
+    if ((window.zhActive && zhActive()) || (window.__zst && __zst.mode)) return _g(raw);
+    const q = nq(raw), mine = activeCustomer ? activeOrdersList.filter(o => o.customerPhone === activeCustomer.phone) : [];
+    if (/(استلمت|وصلني الطلب|وصل الطلب|تم الاستلام)/.test(q)) {
+        if (!activeCustomer) return { reply: 'سجّل دخولك أولاً لتأكيد الاستلام.', actionsHtml: B('تسجيل الدخول', 'enforceAuthGatekeeper(true)') };
+        const o = mine.find(x => x.status === 'ready'); return o ? { reply: 'هل تؤكد استلام الطلب **' + e(o.orderId) + '**؟ سيُغلق الطلب وتنتقل لتقييم الخدمة.', actionsHtml: B('تأكيد الاستلام', "zReceived('" + slug(o.orderId) + "')") } : { reply: 'لا يوجد طلب جاهز أو في الطريق حالياً. يمكنك تأكيد الاستلام بعد أن يصبح الطلب جاهزاً.', actionsHtml: B('تتبع الطلب', "navigateRouter('screen-order-tracking')") };
+    }
+    if (/(قيم|تقييم)/.test(q) && /(خدمه|طلب|تطبيق|الموقع)/.test(q)) return { reply: 'سأفتح لك نافذة التقييم.', actionsHtml: B('تقييم الآن', "omarOpenRate('app')") };
+    if (/(امسح|احذف|ازل|نظف).*(اشعارات)/.test(q)) { if (activeCustomer) zNtClear(); return { reply: 'تم مسح الإشعارات.' }; }
+    if (/(مقروء|اقرا|علم).*(اشعارات)/.test(q)) { if (activeCustomer) zNtReadAll(); return { reply: 'تم تحديد جميع الإشعارات كمقروءة.' }; }
+    if (/(رقم الاصدار|الاصدار|النسخه|version)/.test(q)) return { reply: 'إصدار التطبيق الحالي: **' + e(VER.version) + '** (رقم البناء ' + e(VER.build) + ').' };
+    if (/(كود|كوبون|خصم)/.test(q) && /(ينطبق|يشمل|اي صنف|على ايش|شروط)/.test(q)) return { reply: '## شروط أكواد الخصم\n- قد يكون الكود على المنتجات أو رسوم التوصيل أو صنف أو قسم محدد.\n- بعض الأكواد لها حد أدنى للطلب أو تُستخدم مرة لكل عميل.\n- يظهر في السلة نوع الخصم وسبب عدم انطباقه إن وُجد.' };
+    return _g(raw);
+};
+
+document.addEventListener('DOMContentLoaded', () => {
+    const tags = document.querySelector('#adminPinModalOverlay .admin-role-grid');
+    if (tags) { tags.insertAdjacentHTML('beforeend', '<div class="admin-role-tag"><span>إدارة المحل</span></div>'); tags.querySelectorAll('.admin-role-tag').forEach((t, i) => t.addEventListener('click', () => { zRole = ['master', 'kafarsum', 'sama', 'manager'][i]; syncTags(); })); }
+    const ex = $('admNewCouponExpiry');
+    if (ex) ex.insertAdjacentHTML('afterend', `<div style="display:grid;grid-template-columns:1fr 1fr;gap:8px"><select class="ios-input-field" id="admCpType"><option value="percent">خصم بنسبة مئوية</option><option value="fixed">خصم بمبلغ ثابت (د.أ)</option></select><select class="ios-input-field" id="admCpScope" onchange="document.getElementById('admCpTargetWrap').style.display=(this.value==='item'||this.value==='category')?'block':'none'"><option value="all">على المنتجات</option><option value="delivery">على رسوم التوصيل</option><option value="item">على صنف محدد</option><option value="category">على قسم محدد</option></select></div>
+        <div id="admCpTargetWrap" style="display:none"><select class="ios-input-field" id="admCpTarget"></select></div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;align-items:center"><input type="number" step="0.25" min="0" class="ios-input-field num-font" id="admCpMin" placeholder="الحد الأدنى للطلب (اختياري)"><label style="display:flex;align-items:center;gap:6px;font-size:11.5px;font-weight:700"><input type="checkbox" id="admCpOnce">مرة لكل عميل</label></div>`);
+    const sel = $('admCpScope'); if (sel) sel.onchange = fillTarget;
+    const ap = $('adminPanel-appSettings'); if (ap) ap.insertAdjacentHTML('beforeend', `<div class="clean-card"><div class="clean-title">رقم الإصدار</div><div style="display:grid;grid-template-columns:2fr 1fr;gap:8px;margin-bottom:8px"><input class="ios-input-field num-font" id="zvVer" placeholder="الإصدار (مثال 1.6.0)"><input class="ios-input-field num-font" id="zvBuild" placeholder="رقم البناء"></div><button class="btn-brand-solid" onclick="zvSave()">حفظ ونشر</button></div>`);
+    const _o2 = window.openAdminSubPanel; window.openAdminSubPanel = function (k) { _o2(k); if (k === 'appSettings' && $('zvVer')) { $('zvVer').value = VER.version; $('zvBuild').value = VER.build; } };
+    paintVer(); updateCustomerNotifBadge();
+    const t = setInterval(() => { if (!cloudDb) return; clearInterval(t); cloudDb.collection('settings').doc('app_version').onSnapshot(s => { if (s.exists) { VER = Object.assign(VER, s.data()); safeSet('cc_app_version', VER); paintVer(); } }, () => {}); }, 600);
 });
 })();
 
